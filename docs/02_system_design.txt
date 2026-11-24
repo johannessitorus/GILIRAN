@@ -2,7 +2,7 @@ GILIRAN
 Sistem Penjadwalan, Tukar Shift, dan Serah Terima Karyawan
 DOKUMEN 02 — ARSITEKTUR SISTEM DAN DESAIN BASIS DATA
 Versi: 1.0 (Tahap 2)
-Status: Desain MVP selesai. Nilai bawaan kebijakan masih berupa usulan. Implementasi belum dimulai.
+Status: Desain MVP selesai. Nilai bawaan kebijakan masih berupa usulan. Pelaksanaan Tahap 3 tercatat di dokumen API pendamping.
 Acuan: docs/01_requirements.txt
 Dokumen pendamping: docs/03_api_and_acceptance.md
 
@@ -345,5 +345,5 @@ pengecualian. Desain ini juga memasukkan interval COMPLETED untuk aturan
 tumpang tindih dan istirahat BR-05/BR-06. Hak baca Admin tidak memberi hak
 keputusan supervisor (SRS FR-07). Dokumen pendamping memetakan AC-01–AC-12.
 Pada Tahap 3, konfirmasi nilai kebijakan dan tinjau asumsi desain sebelum
-menetapkan skema migrasi. Implementasi skema dan API serta penulisan dan
-pelaksanaan pengujian belum dimulai.
+menetapkan skema selanjutnya. Perkembangan implementasi dan
+cakupan pengujian dicatat di dokumen pendamping.

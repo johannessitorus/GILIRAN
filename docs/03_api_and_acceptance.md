@@ -1,6 +1,6 @@
 # GILIRAN — Kontrak API Awal dan Uji Penerimaan
 
-Dokumen pendamping Tahap 2 untuk [desain sistem](02_system_design.txt) dan [kebutuhan MVP](01_requirements.txt). Semua rute di bawah memakai awalan `/api/v1`, kecuali rute inisialisasi CSRF Sanctum. Implementasi belum dimulai.
+Dokumen pendamping untuk [desain sistem](02_system_design.txt) dan [kebutuhan MVP](01_requirements.txt). Semua rute di bawah memakai awalan `/api/v1`, kecuali rute inisialisasi CSRF Sanctum. API awal dan tukar shift diterapkan pada Tahap 3. Skenario uji di bawah adalah acuan cakupan.
 
 ## Transport, sesi, dan galat
 
@@ -61,7 +61,37 @@ Atribut penugasan meliputi `id`, `department_id`, `employee_id`, `shift_type_id`
 | PATCH /assignments/{id} | Supervisor di departemennya sendiri. Wajib `version` berupa bilangan bulat positif dan minimal satu dari `employee_id`, `shift_type_id`, `starts_at`, `ends_at`. Hanya untuk SCHEDULED yang belum mulai. Hasil perubahan juga harus belum mulai. | 200 penugasan, versi naik jika berubah | 403, 404, 409 versi, status, tumpang tindih, istirahat, kualifikasi, atau serah terima terkait, 422 |
 | POST /assignments/{id}/cancel | Supervisor di departemennya sendiri. Wajib `version`. Hanya untuk SCHEDULED yang belum mulai. Terapkan batasan serah terima. | 200 penugasan CANCELLED dengan versi yang dinaikkan | 403, 404, 409 versi, status, atau serah terima terkait, 422 |
 
-Pembuatan dan perubahan memerlukan karyawan dan tipe shift aktif di departemen aktif yang sama, starts_at setelah waktu server, ends_at > starts_at, durasi sesuai konfigurasi, tanpa tumpang tindih, istirahat cukup, dan kualifikasi jika diwajibkan. Tolak atribut tak dikenal, termasuk penulisan status langsung. Data kalender dan staf lintas departemen tidak muncul dalam hasil. Seluruh rute terlindungi mengikuti galat autentikasi dan CSRF umum. Aturan pengelolaan tipe shift dan kualifikasi, tukar shift, serah terima, dan pembacaan audit tercantum di §2–§6 desain. Rincian isi permintaan dan respons untuk area itu berada di luar kontrak awal ini. Data uji untuk AC-01–AC-03 pada Tahap 3 memerlukan departemen fiktif, Supervisor yang sesuai, dan tipe shift yang tersedia.
+Pembuatan dan perubahan memerlukan karyawan dan tipe shift aktif di departemen aktif yang sama, starts_at setelah waktu server, ends_at > starts_at, durasi sesuai konfigurasi, tanpa tumpang tindih, istirahat cukup, dan kualifikasi jika diwajibkan. Tolak atribut tak dikenal, termasuk penulisan status langsung. Data kalender dan staf lintas departemen tidak muncul dalam hasil. Seluruh rute terlindungi mengikuti galat autentikasi dan CSRF umum. Aturan pengelolaan tipe shift dan kualifikasi, tukar shift, serah terima, dan pembacaan audit tercantum di §2–§6 desain. Rincian HTTP untuk tukar shift tercantum di bawah. Kontrak untuk tipe shift, kualifikasi, serah terima, dan pembacaan audit menyusul. Data uji untuk AC-01–AC-03 pada Tahap 3 memerlukan departemen fiktif, Supervisor yang sesuai, dan tipe shift yang tersedia.
+
+## Tukar shift
+
+| Metode dan rute | Permintaan dan otorisasi | Respons berhasil |
+| --- | --- | --- |
+| GET /swaps | Admin seluruh organisasi. Supervisor hanya departemennya. Karyawan hanya sebagai pemohon atau karyawan tujuan di departemennya. Paginasi opsional. | 200 daftar permintaan terbaru |
+| GET /swaps/{id} | Lingkup sama dengan daftar. | 200 permintaan dan events dari yang terlama |
+| POST /swaps | Karyawan pemilik penugasan asal. Wajib source_assignment_id dan target_assignment_id yang berbeda, serta reason 1–1000 karakter. Kedua shift aktif, belum mulai, dan satu departemen. | 201 PENDING_PEER dan header Location |
+| POST /swaps/{id}/accept | Karyawan tujuan pada PENDING_PEER. | 200 PENDING_APPROVAL |
+| POST /swaps/{id}/peer-reject | Karyawan tujuan pada PENDING_PEER. | 200 REJECTED |
+| POST /swaps/{id}/approve | Supervisor berwenang pada PENDING_APPROVAL. | 200 APPROVED dan kedua pemilik jadwal telah bertukar |
+| POST /swaps/{id}/reject | Supervisor berwenang pada PENDING_APPROVAL. | 200 REJECTED |
+| POST /swaps/{id}/cancel | Pemohon pada salah satu status menunggu. | 200 CANCELLED |
+
+Rute keputusan menerima objek kosong atau tanpa isi. Respons permintaan memuat
+ID peserta, penugasan dan departemen, alasan, status, tenggat, cap waktu
+keputusan, serta terminal_reason bila sudah berakhir. Rincian menambahkan
+riwayat perubahan status. Waktu dan pengenal mengikuti format umum di atas.
+Status efektif di daftar dan rincian menjadi EXPIRED begitu tenggat tercapai.
+Riwayat kedaluwarsa tersimpan saat pekerjaan berkala atau pemeriksaan berikutnya
+menutup permintaan.
+
+Galat mengikuti format umum. Referensi di luar lingkup memberi 404, tindakan
+oleh pihak yang salah memberi 403, dan masukan yang tidak valid memberi 422.
+Konflik 409 mencakup ASSIGNMENT_RESERVED, ASSIGNMENT_CHANGED, INVALID_TRANSITION,
+SWAP_EXPIRED, NOTICE_TOO_SHORT, INELIGIBLE_EMPLOYEE, SHIFT_DURATION_LIMIT,
+ASSIGNMENT_OVERLAP, MINIMUM_REST_VIOLATION, dan QUALIFICATION_REQUIRED.
+Jika persetujuan gagal validasi definitif, respons 409 disertai perubahan
+permintaan menjadi CANCELLED dan pelepasan reservasi. Penugasan tetap utuh.
+Baca rincian permintaan untuk melihat status dan alasan terbaru.
 
 ## Pemetaan uji penerimaan
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\FoundationController;
+use App\Http\Controllers\SwapController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->controller(FoundationController::class)->group(function () {
@@ -16,4 +17,12 @@ Route::prefix('v1')->controller(FoundationController::class)->group(function () 
         }
         Route::post('/assignments/{id}/cancel', 'cancel')->whereNumber('id');
     });
+});
+
+Route::prefix('v1/swaps')->middleware('auth:sanctum')->controller(SwapController::class)->group(function () {
+    Route::get('/', 'index');
+    Route::post('/', 'store');
+    Route::get('/{id}', 'show')->whereNumber('id');
+    Route::post('/{id}/{action}', 'decide')->whereNumber('id')
+        ->whereIn('action', ['accept', 'peer-reject', 'approve', 'reject', 'cancel']);
 });

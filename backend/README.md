@@ -1,6 +1,6 @@
 # Backend GILIRAN
 
-Fondasi Tahap 3 untuk AC-01 sampai AC-03. Kontrak awal ada di [dokumen API](../docs/03_api_and_acceptance.md).
+Backend Tahap 3 mencakup fondasi penjadwalan dan tukar shift (AC-01 sampai AC-08). Kontrak awal ada di [dokumen API](../docs/03_api_and_acceptance.md).
 
 ## Menjalankan secara lokal
 
@@ -23,7 +23,10 @@ lingkungan selain lokal. Setel header Origin atau Referer dengan asal yang sama
 saat menguji API sesi melalui klien HTTP.
 
 Perintah `php artisan giliran:complete-assignments` menutup penugasan yang
-telah berakhir. Jalankan `docker compose exec api php artisan schedule:work` untuk menjalankan penjadwal secara lokal.
+telah berakhir. Gunakan `php artisan giliran:expire-swaps` untuk menutup permintaan tukar yang
+kedaluwarsa. API juga memeriksa tenggat saat ada tindakan. Jalankan
+`docker compose exec api php artisan schedule:work` untuk menjalankan
+kedua pekerjaan terjadwal setiap menit secara lokal.
 
 ## Uji integrasi
 
@@ -33,5 +36,5 @@ yang membangun ulang skema pada basis data tersebut.
 ```powershell
 docker compose up -d --wait db
 docker compose exec -T db createdb -U giliran giliran_test
-docker compose run --rm -e DB_DATABASE=giliran_test api php artisan test --filter=FoundationTest
+docker compose run --rm -e DB_DATABASE=giliran_test api php artisan test --filter='FoundationTest|SwapTest'
 ```

@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\ShiftSwaps;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -72,3 +73,15 @@ Artisan::command('giliran:complete-assignments', function () {
 })->purpose('Menandai penugasan yang sudah berakhir sebagai selesai');
 
 Schedule::command('giliran:complete-assignments')->everyMinute()->withoutOverlapping();
+
+Artisan::command('giliran:expire-swaps', function (ShiftSwaps $swaps) {
+    DB::table('shift_swap_requests')->whereIn('status', ShiftSwaps::PENDING)
+        ->where('expires_at', '<=', now())->select('id')
+        ->chunkById(100, function ($rows) use ($swaps) {
+            foreach ($rows as $row) {
+                $swaps->expire($row->id);
+            }
+        });
+})->purpose('Menutup permintaan tukar shift yang kedaluwarsa');
+
+Schedule::command('giliran:expire-swaps')->everyMinute()->withoutOverlapping();
