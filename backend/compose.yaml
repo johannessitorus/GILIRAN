@@ -1,0 +1,36 @@
+services:
+  api:
+    build: .
+    working_dir: /app
+    command: php artisan serve --host=0.0.0.0 --no-reload
+    volumes:
+      - .:/app
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_DATABASE: giliran
+      DB_USERNAME: giliran
+      DB_PASSWORD: giliran_local
+      SESSION_DRIVER: database
+      SESSION_SECURE_COOKIE: "false"
+      APP_URL: http://localhost:8000
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: giliran
+      POSTGRES_USER: giliran
+      POSTGRES_PASSWORD: giliran_local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U giliran -d giliran"]
+      interval: 2s
+      timeout: 3s
+      retries: 25
+volumes:
+  postgres_data:
