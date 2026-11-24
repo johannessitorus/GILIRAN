@@ -259,6 +259,14 @@ final class FoundationController extends Controller
             if ($old->status !== 'SCHEDULED' || CarbonImmutable::parse($old->starts_at) <= $now) {
                 throw new ApiProblem(409, 'INVALID_TRANSITION');
             }
+            $reschedules = (isset($input['shift_type_id']) && (int) $input['shift_type_id'] !== $old->shift_type_id)
+                || (isset($input['starts_at']) && ! CarbonImmutable::parse($input['starts_at'])->equalTo(CarbonImmutable::parse($old->starts_at)))
+                || (isset($input['ends_at']) && ! CarbonImmutable::parse($input['ends_at'])->equalTo(CarbonImmutable::parse($old->ends_at)));
+            if (($cancel || $reschedules) && DB::table('handover_reports')->where('status', '<>', 'DRAFT')
+                ->where(fn ($q) => $q->where('source_assignment_id', $old->id)->orWhere('recipient_assignment_id', $old->id))
+                ->exists()) {
+                throw new ApiProblem(409, 'ASSIGNMENT_HAS_HANDOVER');
+            }
         }
         if ($cancel) {
             $row = $this->save('shift_assignments', $id, ['status' => 'CANCELLED', 'version' => $old->version + 1]);

@@ -1,6 +1,6 @@
 # GILIRAN — Kontrak API Awal dan Uji Penerimaan
 
-Dokumen pendamping untuk [desain sistem](02_system_design.txt) dan [kebutuhan MVP](01_requirements.txt). Semua rute di bawah memakai awalan `/api/v1`, kecuali rute inisialisasi CSRF Sanctum. API awal dan tukar shift diterapkan pada Tahap 3. Skenario uji di bawah adalah acuan cakupan.
+Dokumen pendamping untuk [desain sistem](02_system_design.txt) dan [kebutuhan MVP](01_requirements.txt). Semua rute di bawah memakai awalan `/api/v1`, kecuali rute inisialisasi CSRF Sanctum. Skenario uji di bawah adalah acuan cakupan Tahap 3.
 
 ## Transport, sesi, dan galat
 
@@ -61,7 +61,7 @@ Atribut penugasan meliputi `id`, `department_id`, `employee_id`, `shift_type_id`
 | PATCH /assignments/{id} | Supervisor di departemennya sendiri. Wajib `version` berupa bilangan bulat positif dan minimal satu dari `employee_id`, `shift_type_id`, `starts_at`, `ends_at`. Hanya untuk SCHEDULED yang belum mulai. Hasil perubahan juga harus belum mulai. | 200 penugasan, versi naik jika berubah | 403, 404, 409 versi, status, tumpang tindih, istirahat, kualifikasi, atau serah terima terkait, 422 |
 | POST /assignments/{id}/cancel | Supervisor di departemennya sendiri. Wajib `version`. Hanya untuk SCHEDULED yang belum mulai. Terapkan batasan serah terima. | 200 penugasan CANCELLED dengan versi yang dinaikkan | 403, 404, 409 versi, status, atau serah terima terkait, 422 |
 
-Pembuatan dan perubahan memerlukan karyawan dan tipe shift aktif di departemen aktif yang sama, starts_at setelah waktu server, ends_at > starts_at, durasi sesuai konfigurasi, tanpa tumpang tindih, istirahat cukup, dan kualifikasi jika diwajibkan. Tolak atribut tak dikenal, termasuk penulisan status langsung. Data kalender dan staf lintas departemen tidak muncul dalam hasil. Seluruh rute terlindungi mengikuti galat autentikasi dan CSRF umum. Aturan pengelolaan tipe shift dan kualifikasi, tukar shift, serah terima, dan pembacaan audit tercantum di §2–§6 desain. Rincian HTTP untuk tukar shift tercantum di bawah. Kontrak untuk tipe shift, kualifikasi, serah terima, dan pembacaan audit menyusul. Data uji untuk AC-01–AC-03 pada Tahap 3 memerlukan departemen fiktif, Supervisor yang sesuai, dan tipe shift yang tersedia.
+Pembuatan dan perubahan memerlukan karyawan dan tipe shift aktif di departemen aktif yang sama, starts_at setelah waktu server, ends_at > starts_at, durasi sesuai konfigurasi, tanpa tumpang tindih, istirahat cukup, dan kualifikasi jika diwajibkan. Tolak atribut tak dikenal, termasuk penulisan status langsung. Data kalender dan staf lintas departemen tidak muncul dalam hasil. Seluruh rute terlindungi mengikuti galat autentikasi dan CSRF umum. Aturan pengelolaan tipe shift dan kualifikasi, tukar shift, serah terima, dan pembacaan audit tercantum di §2–§6 desain. Kontrak untuk pengelolaan tipe shift dan kualifikasi menyusul. Data uji untuk AC-01–AC-03 pada Tahap 3 memerlukan departemen fiktif, Supervisor yang sesuai, dan tipe shift yang tersedia.
 
 ## Tukar shift
 
@@ -93,9 +93,38 @@ Jika persetujuan gagal validasi definitif, respons 409 disertai perubahan
 permintaan menjadi CANCELLED dan pelepasan reservasi. Penugasan tetap utuh.
 Baca rincian permintaan untuk melihat status dan alasan terbaru.
 
+## Serah terima dan audit
+
+| Metode dan rute | Permintaan dan otorisasi | Respons berhasil |
+| --- | --- | --- |
+| GET /handovers | Admin organisasi, Supervisor departemen, atau Karyawan terkait. Draf hanya terlihat oleh Admin, Supervisor departemen, dan pemilik terkini shift keluar. Paginasi opsional. | 200 daftar laporan |
+| GET /handovers/{id} | Lingkup sama dengan daftar. | 200 laporan beserta tugas |
+| POST /handovers | Pemilik shift keluar mengirim `source_assignment_id` dan dapat menyertakan `recipient_assignment_id`, `summary`, serta `issues`. | 201 DRAFT dan header Location |
+| PATCH /handovers/{id} | Pemilik shift keluar yang memegang draf dapat mengubah `summary`, `issues`, atau `recipient_assignment_id`. | 200 draf |
+| POST /handovers/{id}/adopt | Pemilik baru shift keluar mengambil alih draf. | 200 draf |
+| POST /handovers/{id}/submit | Pemilik shift keluar yang memegang draf merampungkan laporan. Pemilihan ulang `recipient_assignment_id` opsional. | 200 SUBMITTED |
+| POST /handovers/{id}/acknowledge | Pemilik terkini shift penerima mengakui laporan sejak shiftnya mulai. | 200 ACKNOWLEDGED |
+| POST /handovers/{id}/tasks | Pemilik draf menambah tugas dengan `title` dan `details` opsional. | 201 OPEN |
+| PATCH /handovers/{id}/tasks/{taskId} | Pemilik draf mengubah judul atau detail. Setelah pengiriman, pemilik terkini shift penerima atau Supervisor departemen mengubah `status`. | 200 tugas |
+| DELETE /handovers/{id}/tasks/{taskId} | Pemilik draf menghapus tugas. | 204 |
+| GET /audit-logs | Admin organisasi atau Supervisor departemen. Paginasi opsional, diurutkan terbaru dahulu. | 200 daftar audit |
+
+Perubahan laporan dan perubahan atau penghapusan tugas memerlukan `version`
+terkini pada badan JSON. Laporan yang dikirim dapat dibaca oleh pemilik terkini
+shift keluar atau penerima, pengirim, dan pengaku penerimaan di departemen
+yang sama. Jika beberapa shift penerima memiliki waktu mulai paling awal yang
+sama, sertakan ID salah satunya saat membuat draf.
+
+Konflik 409 mencakup `HANDOVER_EXISTS`, `NO_RECIPIENT`,
+`RECIPIENT_SELECTION_REQUIRED`, `INVALID_RECIPIENT`, `DRAFT_ADOPTION_REQUIRED`,
+`RECIPIENT_SHIFT_NOT_STARTED`, `VERSION_CONFLICT`, dan `INVALID_TRANSITION`.
+Pembatalan atau penjadwalan ulang shift yang terkait dengan laporan terkirim
+memberi 409 `ASSIGNMENT_HAS_HANDOVER`. Audit menyimpan metadata perubahan
+tanpa isi bebas laporan dan tugas.
+
 ## Pemetaan uji penerimaan
 
-Gunakan Pest untuk pengujian API dan integrasi PostgreSQL guna memeriksa aturan server. Siapkan data uji terisolasi, waktu terkendali, serta koneksi dan transaksi PostgreSQL yang terpisah untuk menguji operasi serentak. Playwright dapat mencakup alur yang sama melalui antarmuka pada tahap berikutnya. Skenario berikut masih berupa rencana.
+Jalankan pengujian API dan integrasi dengan PHPUnit dan PostgreSQL. Siapkan data uji terisolasi, waktu terkendali, serta koneksi dan transaksi PostgreSQL yang terpisah untuk menguji operasi serentak. Playwright dapat mencakup alur yang sama melalui antarmuka pada tahap berikutnya.
 
 | SRS | Skenario dan hasil yang diharapkan |
 | --- | --- |

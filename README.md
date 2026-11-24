@@ -26,21 +26,21 @@ GILIRAN is a web-based application designed to manage employee shift schedules, 
 - Backend: Laravel REST API
 - Database: PostgreSQL
 - Authentication: Laravel Sanctum
-- Testing: Pest, Playwright
-
-The technology stack is planned and has not yet been implemented.
+- Testing: PHPUnit, with Playwright planned for frontend flows
 
 ## Development Status
 
 - Stage 1: Requirements and MVP planning — Documented
-- Stage 2: System architecture and database design — Initial draft
-- Stage 3: Backend development — Not started
+- Stage 2: System architecture and database design — Documented
+- Stage 3: Backend development — Scheduling, swaps, handovers, tasks, and audit implemented
 - Stage 4: Frontend development — Not started
 
 ## Documentation
 
 - [Software Requirements](docs/01_requirements.txt)
 - [System Design](docs/02_system_design.txt)
+- [API and Acceptance Criteria](docs/03_api_and_acceptance.md)
+- [Backend Setup and Tests](backend/README.md)
 
 ## License
 

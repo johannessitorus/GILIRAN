@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\FoundationController;
+use App\Http\Controllers\HandoverController;
 use App\Http\Controllers\SwapController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,18 @@ Route::prefix('v1')->controller(FoundationController::class)->group(function () 
         }
         Route::post('/assignments/{id}/cancel', 'cancel')->whereNumber('id');
     });
+});
+
+Route::prefix('v1')->middleware('auth:sanctum')->controller(HandoverController::class)->group(function () {
+    Route::get('/audit-logs', 'auditIndex');
+    Route::get('/handovers', 'index');
+    Route::post('/handovers', 'store');
+    Route::get('/handovers/{id}', 'show')->whereNumber('id');
+    Route::patch('/handovers/{id}', 'change')->whereNumber('id');
+    Route::post('/handovers/{id}/{action}', 'change')->whereNumber('id')
+        ->whereIn('action', ['adopt', 'submit', 'acknowledge']);
+    Route::post('/handovers/{id}/tasks', 'task')->whereNumber('id');
+    Route::match(['PATCH', 'DELETE'], '/handovers/{id}/tasks/{taskId}', 'task')->whereNumber(['id', 'taskId']);
 });
 
 Route::prefix('v1/swaps')->middleware('auth:sanctum')->controller(SwapController::class)->group(function () {

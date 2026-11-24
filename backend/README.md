@@ -1,6 +1,6 @@
 # Backend GILIRAN
 
-Backend Tahap 3 mencakup fondasi penjadwalan dan tukar shift (AC-01 sampai AC-08). Kontrak awal ada di [dokumen API](../docs/03_api_and_acceptance.md).
+Backend Tahap 3 mencakup penjadwalan, tukar shift, serah terima, tugas, dan audit (AC-01 sampai AC-12). Kontrak tersedia di [dokumen API](../docs/03_api_and_acceptance.md).
 
 ## Menjalankan secara lokal
 
@@ -36,5 +36,5 @@ yang membangun ulang skema pada basis data tersebut.
 ```powershell
 docker compose up -d --wait db
 docker compose exec -T db createdb -U giliran giliran_test
-docker compose run --rm -e DB_DATABASE=giliran_test api php artisan test --filter='FoundationTest|SwapTest'
+docker compose run --rm -e DB_DATABASE=giliran_test -e SESSION_DRIVER=array api php artisan test
 ```
