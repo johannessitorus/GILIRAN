@@ -1,169 +1,176 @@
-GILIRAN
-Employee Shift Swap & Handover Management System
-DOCUMENT 01 — SOFTWARE REQUIREMENTS SPECIFICATION (SRS)
-Version: 1.0 (MVP baseline)
-Status: Requirements baseline for design; not implemented
+﻿GILIRAN
+Sistem Penjadwalan, Tukar Shift, dan Serah Terima Karyawan
+DOKUMEN 01 — SPESIFIKASI KEBUTUHAN PERANGKAT LUNAK (SRS)
+Versi: 1.0 (acuan MVP)
+Status: Acuan kebutuhan untuk desain dan belum diimplementasikan
 
-1. PROJECT OVERVIEW
-GILIRAN is a responsive web application for teams working in scheduled shifts. It combines two core workflows: employee-to-employee shift swaps, approved by a supervisor, and structured work handovers between consecutive shifts. It is intended as a full-stack portfolio project and a configurable foundation for organizations operating in shifts.
+1. GAMBARAN PROYEK
+GILIRAN adalah aplikasi web responsif bagi tim yang bekerja dengan jadwal shift. Aplikasi ini menggabungkan dua alur utama, yaitu tukar shift antarkaryawan dengan persetujuan supervisor dan serah terima pekerjaan yang terstruktur antarshift berurutan. Proyek ini ditujukan sebagai portofolio pengembangan aplikasi lengkap dan fondasi yang dapat dikonfigurasi bagi organisasi yang bekerja dengan sistem shift.
 
-2. PROBLEM STATEMENT
-- Swap requests handled through private chats are difficult to trace and approve consistently.
-- Schedule edits can introduce overlaps, insufficient rest, or unqualified assignments.
-- Incoming shifts can miss operational issues and unfinished tasks.
-- Managers lack a clear audit history of who changed or acknowledged shift-related records.
+2. PERMASALAHAN
+- Permintaan tukar shift melalui percakapan pribadi sulit dilacak dan disetujui secara konsisten.
+- Perubahan jadwal dapat menyebabkan penugasan tumpang tindih, waktu istirahat yang kurang, atau penugasan kepada karyawan tanpa kualifikasi yang sesuai.
+- Petugas shift berikutnya dapat melewatkan kendala operasional dan tugas yang belum selesai.
+- Pengelola tidak memiliki riwayat yang jelas tentang siapa yang mengubah atau mengakui penerimaan catatan terkait shift.
 
-3. PROJECT OBJECTIVES
-OBJ-01 Centralize employee assignments and shift-swap requests.
-OBJ-02 Require peer acceptance and supervisor approval before changing a schedule.
-OBJ-03 Detect scheduling conflicts and enforce configured organizational rules.
-OBJ-04 Record structured handover notes and unfinished tasks between shifts.
-OBJ-05 Retain traceable decisions and schedule changes.
-OBJ-06 Offer a responsive interface for employees, supervisors, and administrators.
+3. TUJUAN PROYEK
+OBJ-01 Memusatkan penugasan karyawan dan permintaan tukar shift.
+OBJ-02 Mewajibkan penerimaan rekan dan persetujuan supervisor sebelum jadwal berubah.
+OBJ-03 Mendeteksi konflik penjadwalan dan menerapkan aturan organisasi yang dikonfigurasi.
+OBJ-04 Mencatat serah terima dan tugas yang belum selesai secara terstruktur.
+OBJ-05 Menyimpan keputusan dan perubahan jadwal yang dapat dilacak.
+OBJ-06 Menyediakan antarmuka responsif bagi karyawan, supervisor, dan admin.
 
-4. USERS AND ACCESS CONTROL
-4.1 Employee
-- View own assignments and permitted team calendar entries.
-- Request a two-way swap involving an assignment they own.
-- Accept/reject swap requests addressed to them.
-- Write and submit a handover for their assigned shift; acknowledge a handover when they own the designated recipient assignment.
-- View own requests, assigned handovers, and relevant open tasks.
+4. PENGGUNA DAN KONTROL AKSES
+4.1 Karyawan (Employee)
+- Melihat penugasan sendiri dan entri kalender tim yang diizinkan.
+- Mengajukan pertukaran dua arah yang melibatkan penugasan miliknya.
+- Menerima atau menolak permintaan pertukaran yang ditujukan kepadanya.
+- Menulis dan mengirim serah terima untuk shift yang ditugaskan kepadanya serta mengakui penerimaan laporan jika ia memegang penugasan penerima yang ditetapkan.
+- Melihat permintaan sendiri, serah terima yang ditugaskan, dan tugas terbuka yang relevan.
 
 4.2 Supervisor
-- View and maintain shift assignments for managed departments/teams.
-- Review peer-accepted swap requests and approve/reject them.
-- Review handovers and outstanding tasks within their responsibility.
-- View scoped history and audit records.
+- Melihat dan memelihara penugasan shift di departemen atau tim yang dikelola.
+- Meninjau, menyetujui, atau menolak permintaan pertukaran yang telah diterima rekan.
+- Meninjau serah terima dan tugas yang belum selesai dalam lingkup tanggung jawabnya.
+- Melihat riwayat dan catatan audit dalam lingkup aksesnya.
 
 4.3 Admin
-- Manage accounts, employee-to-department membership, roles, shift types, qualifications, and system rules.
-- Review organization-wide records and audit history.
-- Admin privileges do not bypass audit logging or scheduling integrity checks.
+- Mengelola akun, keanggotaan departemen karyawan, peran, tipe shift, kualifikasi, dan aturan sistem.
+- Meninjau catatan dan riwayat audit di seluruh organisasi.
+- Hak admin tetap tunduk pada pencatatan audit dan pemeriksaan integritas jadwal.
 
-Authorization: every read/write operation must enforce role, team scope, and ownership on the backend. Frontend hiding alone is insufficient.
+Otorisasi dilakukan di sisi server pada setiap operasi baca dan tulis, berdasarkan peran, lingkup tim, dan kepemilikan. Menyembunyikan kontrol di antarmuka saja tidak cukup.
 
-5. FUNCTIONAL REQUIREMENTS
-FR-01 Authentication: login, logout, authenticated session, and password-protected accounts.
-FR-02 User Management: admin creates/updates/deactivates users, assigns a role and department; activated employees must have valid team membership.
-FR-03 Shift Scheduling: supervisors create/update assignments within managed departments, subject to validity and overlap rules.
-FR-04 Shift Visibility: employees view their own assignments and a permitted team calendar; sensitive employee details are scoped.
-FR-05 Shift Swap Request: employee selects their own future active assignment and another employee's eligible future assignment to propose a direct two-way exchange; records request and reason.
-FR-06 Peer Decision: targeted employee accepts or rejects a pending request; actions are authenticated, scoped and idempotently protected against double processing.
-FR-07 Supervisor Decision: authorized supervisor approves or rejects a peer-accepted request; approval applies the exchange atomically.
-FR-08 Conflict Detection: validate ownership, overlapping assignments, minimum rest, relevant shift qualification, status, and competing active requests; revalidate at approval.
-FR-09 Handover Authoring: outgoing assigned employee saves draft and submits handover notes, issues, and relevant context for a defined incoming assignment.
-FR-10 Handover Acknowledgement: designated incoming employee acknowledges a submitted handover; time and actor are recorded.
-FR-11 Task Tracking: handover report contains open/in-progress/done follow-up tasks visible to relevant staff; task changes are permission-checked.
-FR-12 Audit Trail: important assignment, swap, and handover actions are appended with timestamp, actor, affected entity, and change summary.
+5. KEBUTUHAN FUNGSIONAL
+FR-01 Autentikasi: masuk, keluar, sesi terautentikasi, dan akun yang dilindungi kata sandi.
+FR-02 Pengelolaan pengguna: admin membuat, memperbarui, dan menonaktifkan pengguna serta menentukan peran dan departemen. Karyawan aktif wajib memiliki keanggotaan tim yang sah.
+FR-03 Penjadwalan shift: supervisor membuat dan memperbarui penugasan di departemen yang dikelola dengan mengikuti aturan validitas dan tumpang tindih.
+FR-04 Visibilitas shift: karyawan melihat penugasan sendiri dan kalender tim yang diizinkan. Akses ke detail sensitif karyawan dibatasi.
+FR-05 Pengajuan tukar shift: karyawan memilih penugasan aktif miliknya yang belum mulai dan penugasan mendatang milik karyawan lain yang memenuhi syarat untuk mengajukan pertukaran langsung dua arah. Sistem mencatat permintaan dan alasannya.
+FR-06 Keputusan rekan: karyawan tujuan menerima atau menolak permintaan yang masih menunggu. Tindakan memerlukan autentikasi dan otorisasi serta dilindungi dari pemrosesan ganda.
+FR-07 Keputusan supervisor: supervisor berwenang menyetujui atau menolak permintaan yang telah diterima rekan. Persetujuan menerapkan pertukaran secara atomik.
+FR-08 Deteksi konflik: sistem memeriksa kepemilikan, tumpang tindih, minimum istirahat, kualifikasi yang relevan, status, dan persaingan dengan permintaan aktif lain. Validasi diulang saat persetujuan.
+FR-09 Penyusunan serah terima: karyawan shift keluar menyimpan draf dan mengirim catatan serah terima, kendala, serta konteks yang relevan untuk penugasan penerima yang telah ditentukan.
+FR-10 Pengakuan penerimaan serah terima: karyawan shift masuk yang ditunjuk mengakui penerimaan laporan yang telah dikirim. Sistem mencatat waktu dan pelakunya.
+FR-11 Pelacakan tugas: laporan memuat tugas tindak lanjut berstatus terbuka, sedang dikerjakan, atau selesai yang dapat dilihat personel terkait. Sistem memeriksa izin setiap perubahan tugas.
+FR-12 Jejak audit: tindakan penting terkait penugasan, pertukaran, dan serah terima ditambahkan ke riwayat beserta waktu, pelaku, entitas terdampak, dan ringkasan perubahan.
 
-6. NON-FUNCTIONAL REQUIREMENTS
-NFR-01 Security: hash passwords; authenticated API; server-side RBAC and ownership authorization; protect against mass assignment and inappropriate data exposure.
-NFR-02 Integrity: swap approval uses one database transaction; either both assignments, request status, and audit record update, or none do.
-NFR-03 Usability: responsive desktop/mobile experience; status and decision history are understandable.
-NFR-04 Performance: initial target for normal API reads is under 1 second in an agreed local test workload; actual performance must be measured, not assumed.
-NFR-05 Reliability: retries or concurrent actions cannot apply the same swap twice.
-NFR-06 Auditability: capture who acted, what changed and when; historical records are not silently rewritten.
-NFR-07 Maintainability: separate frontend, API, business services and persistence.
-NFR-08 Testability: automate key validation and status-transition scenarios; use isolated test fixtures.
-NFR-09 Time handling: store scheduled start/end as timezone-aware instants; display in configured organizational timezone.
-NFR-10 Privacy: minimize employee personal data; apply departmental access boundaries.
+6. KEBUTUHAN NONFUNGSIONAL
+NFR-01 Keamanan: simpan kata sandi dalam bentuk hash, wajibkan autentikasi pada API, periksa hak akses berbasis peran dan kepemilikan di server, serta cegah pengisian atribut tanpa izin dan paparan data yang tidak semestinya.
+NFR-02 Integritas: persetujuan pertukaran menggunakan satu transaksi basis data. Kedua penugasan, status permintaan, dan catatan audit diperbarui bersama atau seluruh perubahan dibatalkan.
+NFR-03 Kemudahan penggunaan: antarmuka responsif pada perangkat desktop dan seluler. Status dan riwayat keputusan mudah dipahami.
+NFR-04 Kinerja: sasaran awal pembacaan normal API adalah kurang dari satu detik pada beban uji lokal yang disepakati. Kinerja aktual harus diukur.
+NFR-05 Keandalan: percobaan ulang atau tindakan serentak tidak dapat menerapkan pertukaran yang sama dua kali.
+NFR-06 Kemampuan audit: catat siapa yang bertindak, apa yang berubah, dan kapan. Riwayat tidak boleh ditulis ulang tanpa jejak.
+NFR-07 Kemudahan pemeliharaan: pisahkan antarmuka, API, layanan bisnis, dan penyimpanan data.
+NFR-08 Kemudahan pengujian: otomatisasi skenario validasi dan perubahan status utama dengan data uji yang terisolasi.
+NFR-09 Penanganan waktu: simpan waktu mulai dan selesai sebagai waktu absolut yang mendukung zona waktu. Tampilkan dalam zona waktu organisasi yang dikonfigurasi.
+NFR-10 Privasi: minimalkan data pribadi karyawan dan terapkan batas akses departemen.
 
-7. SHIFT SWAP WORKFLOW
-7.1 Preconditions
-- Both participating employees are active and eligible.
-- Both shift assignments exist, are distinct, active, and have not started.
-- Requester owns the source; target employee owns the target.
-- No active swap request currently reserves either assignment.
-7.2 Statuses
+7. ALUR TUKAR SHIFT
+7.1 Prasyarat
+- Kedua karyawan peserta aktif dan memenuhi syarat.
+- Kedua penugasan tersedia, berbeda, aktif, dan belum dimulai.
+- Pemohon memiliki penugasan asal. Karyawan tujuan memiliki penugasan tujuan.
+- Tidak ada permintaan tukar aktif yang mereservasi salah satu penugasan.
+
+7.2 Status
 PENDING_PEER -> PENDING_APPROVAL -> APPROVED.
-Alternate terminal results: REJECTED, CANCELLED, EXPIRED.
-7.3 Main flow
-1) Employee A proposes a two-way swap of their assignment with Employee B's assignment.
-2) System validates eligibility and persists request as PENDING_PEER.
-3) Employee B accepts; status becomes PENDING_APPROVAL; or rejects -> REJECTED.
-4) An authorized supervisor revalidates current assignments, conflicts, rest and qualifications.
-5) Approval exchanges ownership atomically and sets APPROVED; rejection sets REJECTED.
-6) Record decision and affected assignment changes in immutable history.
-7.4 Exceptions
-- Requester may cancel while pending; request expiry is enforced before actions.
-- Changed/inactive/started assignments or conflicting concurrent requests block approval with a clear reason; no partial exchange is allowed.
-- Repeated decisions must not apply the swap more than once.
+Status akhir alternatif: REJECTED, CANCELLED, EXPIRED.
 
-8. SHIFT HANDOVER WORKFLOW
-8.1 Preconditions
-- An outgoing assignment and an identified next/recipient assignment are defined for the same operating context (team or work area).
-- Incoming assignee is determined from the recipient assignment at acknowledgement time.
-8.2 Statuses
+7.3 Alur utama
+1) Karyawan A mengajukan pertukaran dua arah atas penugasannya dengan penugasan karyawan B.
+2) Sistem memvalidasi kelayakan dan menyimpan permintaan dengan status PENDING_PEER.
+3) Karyawan B menerima sehingga status menjadi PENDING_APPROVAL, atau menolak sehingga menjadi REJECTED.
+4) Supervisor berwenang memeriksa kembali penugasan terkini, konflik, waktu istirahat, dan kualifikasi.
+5) Persetujuan menukar kepemilikan secara atomik dan menetapkan APPROVED. Penolakan menetapkan REJECTED.
+6) Sistem mencatat keputusan dan perubahan penugasan yang terdampak dalam riwayat yang tidak dapat diubah.
+
+7.4 Pengecualian
+- Pemohon dapat membatalkan permintaan yang masih menunggu. Sistem memeriksa kedaluwarsa sebelum memproses tindakan.
+- Penugasan yang berubah, tidak aktif, sudah dimulai, atau terlibat pada permintaan serentak yang berkonflik menghalangi persetujuan. Sistem menyampaikan alasannya dan tidak menerapkan pertukaran sebagian.
+- Keputusan yang diulang tidak boleh menerapkan pertukaran lebih dari sekali.
+
+8. ALUR SERAH TERIMA SHIFT
+8.1 Prasyarat
+- Penugasan keluar dan penugasan berikutnya sebagai penerima telah ditentukan dalam konteks operasional yang sama, seperti tim atau area kerja.
+- Petugas penerima ditentukan berdasarkan pemilik penugasan penerima saat pengakuan penerimaan.
+
+8.2 Status
 DRAFT -> SUBMITTED -> ACKNOWLEDGED.
-Task statuses: OPEN, IN_PROGRESS, DONE. Acknowledging a report does not mark tasks DONE.
-8.3 Main flow
-1) Outgoing assigned employee creates a handover draft for their shift.
-2) Draft contains summary, issues, and follow-up tasks (if any).
-3) Outgoing employee submits the report; submission actor and time are saved.
-4) Current assignee of the designated recipient shift reviews and acknowledges it.
-5) System records acknowledgement, while tasks remain independently trackable.
-8.4 Exceptions
-- An unauthorized employee cannot submit or acknowledge.
-- A submitted report cannot be silently overwritten; corrections require an auditable revision process (deferred to design decision).
-- A recipient assignment whose owner changes due to a swap must be rechecked when acknowledgement occurs.
+Status tugas: OPEN, IN_PROGRESS, DONE. Pengakuan penerimaan laporan tidak menetapkan tugas menjadi DONE.
 
-9. BUSINESS RULES
-BR-01 Only a currently assigned employee may request a swap of their active assignment.
-BR-02 Both assignments must be future and not yet started at creation and final approval.
-BR-03 Only the targeted employee can accept or reject the peer request.
-BR-04 Supervisor approval is required before any actual schedule exchange.
-BR-05 Assignments of the same employee must not overlap; overlap uses [starts_at, ends_at) intervals.
-BR-06 Enforce configurable minimum rest between adjacent shifts, including overnight shifts.
-BR-07 Enforce employee eligibility/qualification for the incoming assignment.
-BR-08 At most one active swap request may involve an assignment at a time.
-BR-09 Revalidate ownership, timings and policy at approval in a transaction protected against race conditions.
-BR-10 Only the employee assigned to the outgoing shift may author or submit its handover; supervisor administrative correction, if introduced, requires a separate audited permission.
-BR-11 Only the employee owning the designated recipient shift at acknowledgement may acknowledge the submitted handover.
-BR-12 Log swap decisions, assignment ownership changes, and handover transitions with actor and timestamp.
+8.3 Alur utama
+1) Karyawan pemegang penugasan keluar membuat draf serah terima untuk shiftnya.
+2) Draf memuat ringkasan, kendala, dan tugas tindak lanjut jika ada.
+3) Karyawan shift keluar mengirim laporan. Sistem mencatat pelaku dan waktu pengiriman.
+4) Pemegang terkini penugasan penerima meninjau dan mengakui penerimaan laporan.
+5) Sistem mencatat pengakuan penerimaan. Status tugas tetap dilacak secara terpisah.
 
-10. MVP IN-SCOPE / OUT-OF-SCOPE
-10.1 IN SCOPE (v1.0)
-- Authentication and basic role management for Employee, Supervisor, Admin.
-- Departments, shift definitions and assignment calendar.
-- Two-way shift swap proposal, peer decision, supervisor approval, automatic conflict checks.
-- Handover drafts, submissions, acknowledgement and task status.
-- Audit logs and minimal configurable policies.
-10.2 OUT OF SCOPE (v1.1+)
-- Automatic shift optimization, open-shift claims, attendance/GPS, payroll, leave management.
-- WhatsApp/email and real-time push notifications.
-- Advanced analytics, staffing forecasts, AI recommendations, attachments, multi-tenant billing.
+8.4 Pengecualian
+- Karyawan tanpa izin tidak dapat mengirim atau mengakui penerimaan laporan.
+- Laporan yang sudah dikirim tidak boleh ditimpa tanpa jejak. Koreksi memerlukan proses revisi yang dapat diaudit dan ditetapkan pada tahap desain.
+- Jika pemilik penugasan penerima berganti karena pertukaran, sistem memeriksa ulang kepemilikan saat pengakuan penerimaan.
 
-11. PROPOSED TECHNOLOGY STACK
-- Frontend: React, TypeScript, Tailwind CSS, FullCalendar.
-- Backend: Laravel REST API, Laravel Sanctum.
-- Database: PostgreSQL; transactional updates and indexed relationships.
-- Tests: Pest (backend), Playwright (end-to-end).
-- Development: Git, GitHub, Docker Compose.
-These are design choices, not installed or implemented components.
+9. ATURAN BISNIS
+BR-01 Hanya pemilik terkini penugasan aktif yang dapat mengajukan pertukarannya.
+BR-02 Kedua penugasan harus dijadwalkan pada masa mendatang dan belum mulai saat pengajuan dan persetujuan akhir.
+BR-03 Hanya karyawan tujuan yang dapat menerima atau menolak permintaan sebagai rekan.
+BR-04 Pertukaran jadwal memerlukan persetujuan supervisor.
+BR-05 Penugasan karyawan yang sama tidak boleh tumpang tindih. Pemeriksaan menggunakan interval [starts_at, ends_at).
+BR-06 Terapkan minimum istirahat yang dapat dikonfigurasi antara shift yang berdekatan, termasuk shift yang melewati tengah malam.
+BR-07 Terapkan aturan kelayakan atau kualifikasi karyawan untuk penugasan yang akan diterimanya.
+BR-08 Satu penugasan hanya dapat terlibat dalam paling banyak satu permintaan tukar aktif pada saat yang sama.
+BR-09 Periksa kembali kepemilikan, waktu, dan kebijakan saat persetujuan dalam transaksi yang terlindung dari konflik operasi serentak.
+BR-10 Hanya karyawan yang ditugaskan pada shift keluar yang dapat menulis atau mengirim serah terimanya. Jika koreksi administratif oleh supervisor kelak tersedia, tindakan tersebut membutuhkan izin tersendiri dan audit.
+BR-11 Hanya pemilik penugasan penerima yang ditetapkan saat pengakuan yang dapat mengakui penerimaan laporan.
+BR-12 Catat keputusan pertukaran, pergantian pemilik penugasan, dan perubahan status serah terima beserta pelaku dan waktunya.
 
-12. MVP ACCEPTANCE CRITERIA
-AC-01 Admin can create an employee, assign a role, and place the employee in a department.
-AC-02 Supervisor can publish two non-overlapping assignments within their department.
-AC-03 Employee sees their own scheduled assignments.
-AC-04 Employee A can request exchange of two eligible future assignments with Employee B.
-AC-05 Employee B can accept or reject; a rejection never changes either assignment.
-AC-06 Only authorized supervisor can finally approve; approved exchange updates both owners together.
-AC-07 An overlapping or rest-violating swap is rejected without modifying the schedule.
-AC-08 Two concurrent approvals cannot cause a double swap or partial state.
-AC-09 Outgoing employee can submit a handover to a designated recipient shift.
-AC-10 Recipient employee can acknowledge, but unrelated employees cannot.
-AC-11 Unfinished tasks remain open after acknowledgement and can later be updated with audit history.
-AC-12 Key actions have traceable actor, timestamp and outcome in audit history.
+10. CAKUPAN MVP
+10.1 DALAM CAKUPAN (v1.0)
+- Autentikasi dan pengelolaan dasar peran Karyawan, Supervisor, dan Admin.
+- Departemen, definisi shift, dan kalender penugasan.
+- Pengajuan pertukaran dua arah, keputusan rekan, persetujuan supervisor, dan pemeriksaan konflik otomatis.
+- Draf serah terima, pengiriman, pengakuan penerimaan, dan status tugas.
+- Catatan audit dan kebijakan dasar yang dapat dikonfigurasi.
 
-13. OPEN DECISIONS TO FINALIZE BEFORE IMPLEMENTATION
-OD-01 Organizational policy defaults: shift length, notice period, min rest and expiry duration.
-OD-02 Whether shifts require position-specific qualifications; define matching data model.
-OD-03 Whether supervisors may oversee more than one department and whether an employee may belong to multiple departments.
-OD-04 How outgoing and incoming assignments are paired when shifts overlap or there is a gap.
-OD-05 Correction policy for submitted handovers and task edit permissions.
-OD-06 Conflict behavior when a swap changes a handover author or recipient before submission/acknowledgement.
-OD-07 Precise statuses for a failed approval validation versus expiry/rejection.
-OD-08 Timezone scope: one timezone per organization for MVP.
+10.2 DI LUAR CAKUPAN (v1.1+)
+- Optimasi jadwal otomatis, pengambilan shift kosong, absensi atau GPS, penggajian, dan pengelolaan cuti.
+- Notifikasi WhatsApp, surel, dan notifikasi langsung.
+- Analitik lanjutan, perkiraan kebutuhan tenaga kerja, rekomendasi AI, lampiran, dan penagihan untuk beberapa organisasi.
 
-14. IMPLEMENTATION STATUS
-Requirements drafted for Stage 1. No source code, database, test run or deployment is claimed. Stage 2 design must resolve the open decisions before schema migrations are frozen.
+11. USULAN TEKNOLOGI
+- Antarmuka: React, TypeScript, Tailwind CSS, FullCalendar.
+- Sisi server: Laravel REST API, Laravel Sanctum.
+- Basis data: PostgreSQL dengan pembaruan transaksional dan relasi berindeks.
+- Pengujian: Pest (sisi server), Playwright (pengujian menyeluruh).
+- Pengembangan: Git, GitHub, Docker Compose.
+Pilihan teknologi ini masih pada tahap desain. Instalasi dan implementasi belum dimulai.
+
+12. KRITERIA PENERIMAAN MVP
+AC-01 Admin dapat membuat karyawan, menetapkan peran, dan menempatkannya di departemen.
+AC-02 Supervisor dapat menerbitkan dua penugasan yang tidak tumpang tindih di departemennya.
+AC-03 Karyawan dapat melihat penugasan yang dijadwalkan untuk dirinya.
+AC-04 Karyawan A dapat meminta pertukaran dua penugasan mendatang yang memenuhi syarat dengan karyawan B.
+AC-05 Karyawan B dapat menerima atau menolak. Penolakan tidak mengubah kedua penugasan.
+AC-06 Hanya supervisor berwenang yang dapat memberikan persetujuan akhir. Pertukaran yang disetujui memperbarui kedua pemilik secara bersamaan.
+AC-07 Pertukaran yang menyebabkan tumpang tindih atau melanggar waktu istirahat ditolak tanpa mengubah jadwal.
+AC-08 Dua persetujuan serentak tidak mengakibatkan pertukaran ganda atau perubahan sebagian.
+AC-09 Karyawan shift keluar dapat mengirim serah terima kepada shift penerima yang ditetapkan.
+AC-10 Karyawan penerima dapat mengakui penerimaan laporan. Karyawan yang tidak terkait tidak dapat melakukannya.
+AC-11 Tugas yang belum selesai tetap terbuka setelah pengakuan penerimaan dan dapat diperbarui kemudian dengan riwayat audit.
+AC-12 Tindakan penting memiliki pelaku, waktu, dan hasil yang dapat dilacak dalam riwayat audit.
+
+13. KEPUTUSAN YANG PERLU DITUNTASKAN SEBELUM IMPLEMENTASI
+OD-01 Nilai bawaan kebijakan organisasi: durasi shift, tenggat pengajuan, minimum istirahat, dan masa berlaku permintaan.
+OD-02 Tentukan apakah shift memerlukan kualifikasi untuk posisi tertentu dan bagaimana model datanya.
+OD-03 Tentukan apakah supervisor boleh mengelola lebih dari satu departemen dan apakah karyawan boleh menjadi anggota beberapa departemen.
+OD-04 Tentukan cara memasangkan penugasan keluar dan masuk ketika jadwal tumpang tindih atau berjeda.
+OD-05 Kebijakan koreksi laporan yang telah dikirim dan izin perubahan tugas.
+OD-06 Penanganan konflik jika pertukaran mengubah penulis draf atau penerima sebelum pengiriman atau pengakuan penerimaan.
+OD-07 Status yang tepat untuk persetujuan yang gagal validasi, kedaluwarsa, dan penolakan.
+OD-08 Lingkup zona waktu: satu zona waktu per organisasi untuk MVP.
+
+14. STATUS IMPLEMENTASI
+Kebutuhan disusun pada Tahap 1. Dokumen ini tidak menyatakan bahwa kode, basis data, pengujian, atau peluncuran telah tersedia. Tahap 2 harus menyelesaikan keputusan terbuka sebelum skema migrasi ditetapkan.

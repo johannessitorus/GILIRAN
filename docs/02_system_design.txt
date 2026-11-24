@@ -1,204 +1,349 @@
 GILIRAN
-Employee Shift Swap & Handover Management System
-DOCUMENT 02 — SYSTEM ARCHITECTURE & DATABASE DESIGN
-Version: 0.2 (Stage 2 draft — review required)
-Status: Conceptual / preliminary logical design, not implemented
-Dependencies: docs/01_requirements.txt
+Sistem Penjadwalan, Tukar Shift, dan Serah Terima Karyawan
+DOKUMEN 02 — ARSITEKTUR SISTEM DAN DESAIN BASIS DATA
+Versi: 1.0 (Tahap 2)
+Status: Desain MVP selesai. Nilai bawaan kebijakan masih berupa usulan. Implementasi belum dimulai.
+Acuan: docs/01_requirements.txt
+Dokumen pendamping: docs/03_api_and_acceptance.md
 
-1. DESIGN GOALS AND BOUNDARIES
-- Support two-party swap plus supervisor approval, and outgoing-to-incoming handover.
-- Preserve data integrity for concurrent requests and across time boundaries.
-- Make policy decisions configurable and actions auditable.
-- Keep the MVP a modular monolith instead of prematurely introducing microservices.
-- No claim that migrations or endpoints have been implemented.
+1. ARSITEKTUR
+React, TypeScript, Tailwind, dan FullCalendar mengakses API REST JSON Laravel
+melalui HTTPS. Gunakan sesi berbasis kuki pihak pertama dengan Sanctum. Laravel
+berbentuk monolit modular yang mencakup Identitas dan Departemen, Penjadwalan,
+Tukar Shift, Serah Terima dan Tugas, Kebijakan, serta Audit. Pengendali memvalidasi
+masukan HTTP, kebijakan memeriksa akses sumber daya, layanan menangani transisi
+dan transaksi, dan PostgreSQL menerapkan batasan relasi dan jadwal. API menentukan
+tindakan yang tersedia. Simpan waktu sebagai TIMESTAMPTZ, kirim waktu berformat
+RFC 3339 dengan selisih zona waktu, dan tampilkan dalam zona waktu IANA organisasi.
 
-2. HIGH-LEVEL ARCHITECTURE
-Browser (React + TypeScript + Tailwind + FullCalendar)
-    |
-    | HTTPS / JSON REST requests
-    v
-Laravel REST API (Sanctum authentication, authorization, request validation)
-    |
-    +-- Identity & Department Module
-    +-- Scheduling Module
-    +-- Swap Workflow Module
-    +-- Handover & Task Module
-    +-- Audit Module
-    +-- Policy Module
-    |
-    v
-PostgreSQL (transactional database)
+2. ERD LOGIS (12 TABEL DOMAIN)
+Notasi 1:N berarti satu ke banyak. Keterangan membedakan peran setiap kunci asing.
 
-Architecture rules:
-- All authoritative role, ownership, concurrency and policy checks run on server.
-- UI status labels reflect backend workflow states rather than making authoritative decisions.
-- Backend services encapsulate workflow transitions; controllers should not embed swap transaction logic.
-- Store timestamps in UTC/timestamptz and present using the organization's configured timezone.
+departments 1:N users (departemen opsional hanya untuk Admin)
+departments 1:N shift_types, shift_assignments, audit_logs (lingkup audit opsional)
+users 1:N employee_qualifications N:1 shift_types
+users 1:N shift_assignments (pemilik dan pembuat)
+shift_types 1:N shift_assignments (tipe)
+users 1:N shift_swap_requests (pemohon, karyawan tujuan, supervisor opsional)
+shift_assignments 1:N shift_swap_requests (asal dan tujuan secara terpisah)
+shift_swap_requests 1:0..2 shift_swap_reservations N:1 shift_assignments
+  Setiap penugasan memiliki 0..1 reservasi. Permintaan aktif memiliki tepat dua.
+shift_swap_requests 1:N shift_swap_events N:0..1 users (pelaku)
+shift_assignments 1:0..1 handover_reports (shift keluar)
+shift_assignments 1:N handover_reports (shift penerima)
+users 1:N handover_reports (pemilik draf, pengirim, pengaku penerimaan)
+handover_reports 1:N handover_tasks N:1 users (pembuat dan pengubah terakhir)
+users 1:N audit_logs dan system_settings (pelaku/pengubah opsional)
 
-3. CORE ENTITIES (11 TABLES, PRELIMINARY)
+2.1 Kunci, batasan, dan indeks
+ID entitas menggunakan PK BIGINT yang dihasilkan otomatis, kecuali disebut lain.
+Kolom menggunakan NOT NULL kecuali ditandai opsional. Entitas yang dapat diubah
+memiliki created_at dan updated_at kecuali ditentukan lain. Semua cap waktu
+menggunakan TIMESTAMPTZ kecuali waktu lokal yang ditandai secara eksplisit.
+Penghapusan melalui FK menggunakan RESTRICT. Nonaktifkan data referensi agar
+riwayat utuh. Indeks setiap FK dengan B-tree jika belum tercakup oleh awalan
+kunci atau indeks lain. Kolom status dan peran memakai daftar nilai CHECK.
+Layanan menerapkan aturan antarbaris dalam transaksi kecuali jika dijamin
+oleh batasan basis data yang disebutkan.
 
-3.1 departments
-id BIGINT PK; name VARCHAR(120) NOT NULL UNIQUE; active BOOLEAN NOT NULL DEFAULT TRUE; created_at/updated_at.
+- departments: name VARCHAR(120) UNIQUE; active BOOLEAN bernilai bawaan true.
+- users: department_id FK opsional; name VARCHAR(160); email VARCHAR(255)
+  UNIQUE dengan CHECK agar spasi tepi dibuang dan hurufnya kecil; password_hash
+  VARCHAR(255); role ADMIN/SUPERVISOR/EMPLOYEE; active BOOLEAN bawaan true.
+  CHECK mewajibkan departemen untuk peran selain Admin. Layanan mewajibkan
+  keanggotaan aktif bagi pengguna aktif selain Admin. Indeks (department_id, role, active).
+- shift_types: department_id FK; name VARCHAR(100); waktu mulai dan selesai
+  lokal bawaan bertipe TIME. Waktu selesai yang lebih awal berarti hari
+  berikutnya dan kedua waktu tidak boleh sama. requires_qualification BOOLEAN
+  bawaan false; active BOOLEAN bawaan true. UNIQUE (department_id, name) dan
+  UNIQUE (id, department_id) untuk FK yang dibatasi departemen.
+- shift_assignments: employee_id, department_id, created_by berupa FK;
+  shift_type_id wajib dengan FK gabungan (shift_type_id, department_id) ke
+  shift_types; starts_at, ends_at; status SCHEDULED/CANCELLED/COMPLETED;
+  version INT >= 1 bawaan 1. CHECK ends_at > starts_at. Indeks
+  (employee_id, starts_at), (department_id, starts_at, id), dan
+  (status, ends_at) untuk proses penyelesaian. Lihat §3.
+- employee_qualifications: employee_id dan shift_type_id berupa FK; valid_from
+  dan valid_until berupa TIMESTAMPTZ opsional. CHECK urutan batas jika keduanya
+  diisi. UNIQUE (employee_id, shift_type_id). Berikan kualifikasi hanya untuk
+  karyawan di departemen yang sama. Jika diwajibkan, masa berlaku mencakup
+  seluruh interval penugasan tujuan. Batas null berarti tidak dibatasi. MVP
+  mendukung satu periode berlaku per karyawan dan tipe shift.
+- shift_swap_requests: requester_id, target_employee_id, source_assignment_id,
+  target_assignment_id, dan department_id berupa FK; reason TEXT (1–1000
+  karakter setelah spasi tepi dibuang); status sesuai §5; peer_responded_at
+  opsional; supervisor_id dan supervisor_decided_at opsional dan berpasangan;
+  expires_at > created_at; source_version_at_request dan
+  target_version_at_request INT >= 1. terminal_reason berupa kode yang wajib
+  tepat untuk status akhir. CHECK mewajibkan penugasan berbeda, karyawan
+  berbeda, serta respons rekan dan keputusan supervisor untuk persetujuan.
+  Indeks (requester_id, created_at), (target_employee_id, created_at),
+  (department_id, status, created_at), dan (expires_at, id) parsial untuk status menunggu.
+- shift_swap_reservations: assignment_id PK/FK; swap_request_id FK; side
+  SOURCE/TARGET; UNIQUE (swap_request_id, side). PK mencakup semua penugasan
+  di kedua sisi. Pemeriksaan batasan yang ditangguhkan hingga commit, pada
+  perubahan permintaan maupun reservasi, memastikan permintaan menunggu
+  memiliki tepat dua reservasi yang sesuai dan permintaan berstatus akhir
+  tidak memiliki reservasi. Baris reservasi bersifat sementara.
+- shift_swap_events: swap_request_id FK; actor_id FK opsional untuk kedaluwarsa
+  oleh sistem; event_type, from_status opsional, to_status, reason_code, dan
+  created_at. Indeks (swap_request_id, created_at, id). Riwayat hanya dapat ditambah.
+- handover_reports: source_assignment_id UNIQUE FK; recipient_assignment_id
+  FK; draft_owner_id FK yang dipertahankan setelah pengiriman; summary dan
+  issues berupa TEXT opsional; status DRAFT/SUBMITTED/ACKNOWLEDGED; submitted_by
+  dan acknowledged_by berupa FK pengguna opsional, berpasangan dengan
+  submitted_at dan acknowledged_at. version positif dan CHECK kedua
+  penugasan berbeda. Atribut pengiriman wajib tepat untuk
+  SUBMITTED/ACKNOWLEDGED, dan atribut pengakuan wajib tepat untuk
+  ACKNOWLEDGED. CHECK waktu pengakuan >= waktu pengiriman dan ringkasan
+  tidak kosong saat dikirim. Indeks (recipient_assignment_id, status).
+- handover_tasks: handover_report_id FK; title VARCHAR(255) tidak kosong
+  setelah spasi tepi dibuang; details TEXT opsional; status OPEN/IN_PROGRESS/DONE
+  bawaan OPEN; created_by dan updated_by berupa FK pengguna; version positif
+  dengan nilai bawaan 1. Indeks (handover_report_id, status, id).
+- audit_logs: actor_id FK opsional untuk sistem; department_id FK opsional
+  dengan lingkup dicatat saat penulisan; action, entity_type, entity_id,
+  outcome, metadata berupa objek JSONB kosong secara bawaan, serta created_at.
+  Indeks (department_id, created_at, id), (entity_type, entity_id, created_at, id),
+  dan (created_at, id). Simpan ID, status, waktu, dan kode alasan seperlunya
+  untuk membandingkan kondisi sebelum dan sesudah. Kecualikan kredensial,
+  token, alasan pertukaran, dan isi serah terima. Peran basis data aplikasi
+  tidak dapat mengubah atau menghapus catatan audit atau kejadian. Simpan
+  keduanya sepanjang masa penggunaan demo.
+- system_settings: setting_key VARCHAR(100) PK; setting_value JSONB;
+  updated_by FK opsional; updated_at. Inisialisasi setiap kunci yang diizinkan
+  di §7. Layanan kebijakan memvalidasi perubahan dan mengaudit nilai lama dan baru.
 
-3.2 users
-id BIGINT PK; department_id BIGINT FK departments.id (MVP single department); name VARCHAR(160) NOT NULL;
-email VARCHAR(255) UNIQUE NOT NULL; password VARCHAR(255) NOT NULL (hash);
-role VARCHAR(20) NOT NULL CHECK IN ('ADMIN','SUPERVISOR','EMPLOYEE');
-active BOOLEAN NOT NULL DEFAULT TRUE; created_at/updated_at.
-Note: an ADMIN may be unassigned to a department; supervisor department scopes must be enforced. For multiple departments per supervisor, add a membership table in the next schema review.
+3. INTEGRITAS JADWAL DAN URUTAN PENGUNCIAN
+Gunakan btree_gist dan batasan DEFERRABLE INITIALLY IMMEDIATE EXCLUDE USING gist
+pada (employee_id WITH =, tstzrange(starts_at, ends_at, '[)') WITH &&) WHERE
+(status IN ('SCHEDULED','COMPLETED')). Penugasan selesai tetap diperhitungkan
+untuk waktu istirahat dan tumpang tindih. Interval penugasan yang dibatalkan
+dikecualikan. Hanya persetujuan pertukaran yang menangguhkan pemeriksaan dan
+menjalankannya kembali sebelum commit. Istirahat dihitung dalam menit aktual
+antara interval akhir yang berdekatan, termasuk shift selesai dan shift yang
+melewati tengah malam. Periksa setiap pasangan yang berubah setelah
+mengeluarkan kedua penugasan lama dan menyimulasikan hasil pertukaran.
 
-3.3 shift_types
-id BIGINT PK; department_id BIGINT FK departments.id; name VARCHAR(100) NOT NULL;
-start_local_time TIME; end_local_time TIME; active BOOLEAN DEFAULT TRUE;
-created_at/updated_at.
-Note: shift templates are defaults; actual assignments carry concrete start/end instants, including overnight cases.
+Gunakan READ COMMITTED dan penguncian baris secara eksplisit. Untuk perubahan
+yang memengaruhi jadwal:
+1) Tindakan tukar shift mengunci baris permintaan terlebih dahulu. Pengajuan
+   baru menyisipkan baris permintaan setelah mengunci karyawan dan penugasan.
+   Proses kedaluwarsa hanya mengunci permintaan dan menghapus reservasinya.
+   Selesaikan pelepasan reservasi kedaluwarsa dalam transaksi terpisah sebelum
+   mencoba membuat permintaan yang bersaing.
+2) Kunci baris departemen terkait sesuai urutan ID menaik. Gunakan kunci
+   bersama untuk alur biasa dan kunci eksklusif untuk perubahan status
+   departemen serta pembuatan, perubahan waktu, atau pembatalan penugasan.
+   Baca baris kebijakan dengan kunci bersama menurut urutan kunci. Perubahan
+   kebijakan memakai kunci eksklusif.
+3) Kunci baris pengguna terdampak sesuai urutan ID menaik, termasuk pemilik
+   lama dan baru pada pengalihan atau pertukaran, serta pelaku yang peran dan
+   lingkupnya menentukan izin. Pengubahan akun dan kualifikasi mengikuti
+   penguncian karyawan yang sama. Perubahan tipe shift mengunci departemen
+   pemilik secara eksklusif.
+4) Kunci baris penugasan terdampak sesuai urutan ID menaik, lalu laporan
+   serah terima, lalu tugas. Tahan kunci departemen saat memeriksa atau memilih
+   shift penerima berikutnya. Baca ulang keadaan setelah penguncian. Jika
+   menemukan baris lain yang perlu dikunci, mulai ulang transaksi agar urutan
+   kunci tetap konsisten.
+5) Validasi, tulis perubahan, dan catat audit dalam satu transaksi. Ulangi
+   seluruh transaksi apabila terjadi kebuntuan atau kegagalan serialisasi
+   sementara, dengan jumlah percobaan terbatas.
 
-3.4 shift_assignments
-id BIGINT PK; employee_id BIGINT FK users.id NOT NULL; department_id BIGINT FK departments.id NOT NULL;
-shift_type_id BIGINT FK shift_types.id NULL; starts_at TIMESTAMPTZ NOT NULL; ends_at TIMESTAMPTZ NOT NULL;
-status VARCHAR(20) NOT NULL CHECK IN ('SCHEDULED','CANCELLED','COMPLETED');
-version INTEGER NOT NULL DEFAULT 1; created_by BIGINT FK users.id; created_at/updated_at;
-CHECK (ends_at > starts_at).
-Indexes (employee_id, starts_at), (department_id, starts_at), (status, starts_at).
-Integrity: prevent overlapping active assignments for each employee using PostgreSQL exclusion constraint on tstzrange, with btree_gist and a partial predicate for SCHEDULED assignments (or equivalent locked validation with tests). Exact migration to be reviewed.
+Perubahan jadwal biasa tidak mengunci permintaan pertukaran atau menghapus
+reservasi. Setiap perubahan substantif menaikkan versi penugasan. Permintaan
+dengan versi lama ditutup saat persetujuan dicoba, atau dapat dibatalkan dan
+dapat kedaluwarsa. Layanan penjadwalan mengunci baris karyawan saat menambah
+penugasan agar operasi lain tidak dapat menyisipkan interval berkonflik di
+antara validasi dan commit. Pengalihan langsung berlaku pada satu penugasan
+dan diaudit. Pertukaran antarkaryawan hanya melalui alur tukar shift. Periksa
+kembali status akun, departemen, tipe shift, kualifikasi, dan lingkup akses
+selama kunci dipegang. Tolak perubahan peran, departemen, atau penonaktifan
+jika penugasan mendatang atau kewajiban menerima laporan yang belum diakui
+akan kehilangan pemilik yang memenuhi syarat. Penonaktifan departemen
+mensyaratkan seluruh akun anggota dan tipe shift telah nonaktif serta
+tidak ada kewajiban tertunda.
 
-3.5 employee_qualifications
-id BIGINT PK; employee_id BIGINT FK users.id; shift_type_id BIGINT FK shift_types.id;
-valid_from DATE NULL; valid_until DATE NULL; UNIQUE(employee_id, shift_type_id).
-Note: preliminary simplified model assumes shift-type qualification; may require distinct qualification/position entities if organization uses skill requirements.
+Penugasan berstatus SCHEDULED sejak diterbitkan. Supervisor dapat mengubah
+atau membatalkan penugasan SCHEDULED yang belum mulai. Sistem mengubah
+SCHEDULED menjadi COMPLETED pada atau setelah ends_at. Penugasan CANCELLED
+dan COMPLETED tidak dapat diubah. Penugasan yang sudah berakhir dapat dipakai
+untuk serah terima sebelum proses berkala menandainya selesai. Pertahankan
+ID penugasan dan riwayat kepemilikan. Ikuti batasan pembatalan pada §6.
 
-3.6 shift_swap_requests
-id BIGINT PK; requester_id BIGINT FK users.id; target_employee_id BIGINT FK users.id;
-source_assignment_id BIGINT FK shift_assignments.id; target_assignment_id BIGINT FK shift_assignments.id;
-status VARCHAR(30) NOT NULL CHECK IN ('PENDING_PEER','PENDING_APPROVAL','APPROVED','REJECTED','CANCELLED','EXPIRED');
-reason TEXT NULL; peer_responded_at TIMESTAMPTZ NULL; supervisor_id BIGINT FK users.id NULL;
-supervisor_decided_at TIMESTAMPTZ NULL; expires_at TIMESTAMPTZ NOT NULL;
-source_version_at_request INTEGER; target_version_at_request INTEGER;
-created_at/updated_at; CHECK (source_assignment_id <> target_assignment_id);
-Indexes on requester, target_employee, status, expires_at.
-IMPORTANT: a unique index on each of source_assignment_id and target_assignment_id alone does NOT prevent the same assignment appearing in the other column of a separate active swap. Use a separate normalized reservation table or an equivalent database-serialized lock/constraint scheme. This is an unresolved physical-schema decision, not a completed guarantee.
+4. MATRIKS AKSES
+Periksa lingkup setiap operasi baca dan tulis sebelum mengembalikan data.
+Setiap akun memiliki satu peran. Pengguna selain Admin memiliki satu
+departemen. Supervisor mengelola departemennya. Peserta pertukaran dan kedua
+penugasan harus berada di sana. Untuk akses riwayat sebagai peserta,
+departemen pengguna saat ini harus sama dengan departemen catatan.
 
-3.7 shift_swap_events
-id BIGINT PK; swap_request_id BIGINT FK shift_swap_requests.id; actor_id BIGINT FK users.id;
-event_type VARCHAR(40) NOT NULL; from_status VARCHAR(30) NULL; to_status VARCHAR(30) NULL;
-note TEXT NULL; created_at TIMESTAMPTZ NOT NULL DEFAULT now().
-Append-only event stream for swap decisions and transitions.
+Tindakan                                Admin        Supervisor    Karyawan
+Kelola departemen, akun, tipe shift,
+  kualifikasi, dan kebijakan            Organisasi   —             —
+Baca jadwal                             Organisasi   Departemen    Sendiri + kalender terbatas
+Terbitkan/ubah/batalkan penugasan       —            Departemen    —
+Ajukan tukar shift                      —            —             Pemilik penugasan asal
+Baca permintaan dan keputusan           Organisasi   Departemen    Pemohon atau karyawan tujuan
+Terima/tolak sebagai rekan               —            —             Karyawan tujuan
+Setujui/tolak setelah diterima rekan    —            Departemen    —
+Batalkan permintaan tertunda            —            —             Pemohon
+Baca serah terima dan tugas             Organisasi   Departemen    Sesuai §6
+Buat/ubah/adopsi/kirim draf              —            —             Pemilik terkini shift keluar
+Ubah isi tugas dalam draf               —            —             Pemilik terkini yang mengadopsi draf
+Akui penerimaan laporan                 —            —             Pemilik terkini shift penerima
+Ubah status tugas setelah dikirim       —            Departemen    Pemilik terkini shift penerima
+Baca audit umum                         Organisasi   Departemen    —
+Baca akun pengguna                      Organisasi   Daftar staf   Akun sendiri
 
-3.8 handover_reports
-id BIGINT PK; source_assignment_id BIGINT FK shift_assignments.id UNIQUE NOT NULL;
-recipient_assignment_id BIGINT FK shift_assignments.id NOT NULL;
-summary TEXT; issues TEXT; status VARCHAR(20) NOT NULL CHECK IN ('DRAFT','SUBMITTED','ACKNOWLEDGED');
-submitted_at TIMESTAMPTZ NULL; submitted_by BIGINT FK users.id NULL;
-acknowledged_by BIGINT FK users.id NULL; acknowledged_at TIMESTAMPTZ NULL;
-version INTEGER NOT NULL DEFAULT 1; created_at/updated_at;
-CHECK (source_assignment_id <> recipient_assignment_id).
-When recipient ownership changes due to swap, acknowledgement must check CURRENT assignment ownership, not a cached person ID.
+Hanya sistem yang menandai permintaan kedaluwarsa dan menyelesaikan penugasan.
+Kalender tim untuk karyawan memuat ID penugasan, tipe, waktu, status, dan nama
+tampilan untuk membantu memilih penugasan yang dapat ditukar. Surel,
+kualifikasi, dan detail pribadi tidak ditampilkan. Daftar staf supervisor
+dibatasi pada departemennya dan hanya memuat ID, nama tampilan, serta status
+aktif. Karyawan melihat riwayat keputusan sendiri melalui sumber daya terkait.
+Admin tidak berhak menggantikan pemberi persetujuan atau mengoreksi laporan.
+Antarmuka dapat menggunakan daftar tindakan dari API. Server memeriksa ulang
+otorisasi dan status pada setiap tindakan.
 
-3.9 handover_tasks
-id BIGINT PK; handover_report_id BIGINT FK handover_reports.id;
-title VARCHAR(255) NOT NULL; details TEXT NULL;
-status VARCHAR(20) NOT NULL CHECK IN ('OPEN','IN_PROGRESS','DONE');
-created_by BIGINT FK users.id; updated_by BIGINT FK users.id NULL; created_at/updated_at.
-No automatic DONE transition on report acknowledgement.
+5. ALUR TUKAR SHIFT
+Saat pengajuan, karyawan memberikan penugasan asal, penugasan rekan, dan alasan.
+Tentukan kedua peserta dari kepemilikan yang sudah dikunci. Periksa bahwa
+karyawan dan penugasan berbeda, karyawan dan tipe shift aktif, departemen sama,
+kedua shift SCHEDULED dan belum mulai, serta pengajuan memenuhi tenggat.
+Periksa tumpang tindih, istirahat, kualifikasi, dan kewajiban serah terima
+berdasarkan kepemilikan akhir. Simpan versi, tenggat, dan status PENDING_PEER,
+buat dua reservasi menurut urutan ID penugasan, lalu catat kejadian dan audit
+dalam transaksi yang sama. Reservasi aktif menghasilkan ASSIGNMENT_RESERVED
+(409). Konflik PK membatalkan seluruh transaksi. Jika dua pengajuan bersaing,
+hanya satu yang dapat tersimpan, termasuk jika penugasan yang sama berada di
+sisi berbeda. Jika reservasi kedaluwarsa saat pengajuan, lepaskan reservasi
+kedaluwarsa lalu ulangi transaksi dengan jumlah percobaan terbatas.
 
-3.10 audit_logs
-id BIGINT PK; actor_id BIGINT FK users.id NULL; action VARCHAR(80) NOT NULL;
-entity_type VARCHAR(60) NOT NULL; entity_id BIGINT NULL;
-metadata JSONB NOT NULL DEFAULT '{}'; created_at TIMESTAMPTZ NOT NULL DEFAULT now().
-Avoid storing passwords, tokens or excessive personal data in audit metadata; append-only.
+Dari                 Pelaku dan tindakan                          Ke
+PENDING_PEER         Karyawan tujuan menerima                     PENDING_APPROVAL
+PENDING_PEER         Karyawan tujuan menolak                      REJECTED
+PENDING_APPROVAL     Supervisor berwenang berhasil menyetujui     APPROVED
+PENDING_APPROVAL     Supervisor berwenang menolak                 REJECTED
+Kedua status tunggu  Pemohon membatalkan                          CANCELLED
+Kedua status tunggu  Sistem mencapai expires_at                   EXPIRED
+PENDING_APPROVAL     Validasi persetujuan menemukan konflik pasti CANCELLED
 
-3.11 system_settings
-id BIGINT PK; setting_key VARCHAR(100) UNIQUE NOT NULL; setting_value JSONB NOT NULL;
-updated_by BIGINT FK users.id NULL; updated_at TIMESTAMPTZ NOT NULL DEFAULT now().
-Examples: minimum_rest_minutes, request_notice_minutes, swap_expiration_hours, organization_timezone.
-Validation/range rules for each key should be enforced by application services.
+Tenggat dihitung dari nilai yang lebih awal antara created_at ditambah masa
+berlaku dan waktu mulai shift pertama. Tenggat pengajuan dihitung dari shift
+pertama saat pengajuan. Saat persetujuan, kedua shift harus tetap belum mulai.
+Setelah memperoleh kunci, bandingkan waktu server saat pemeriksaan dengan
+expires_at. Waktu yang sama sudah dianggap kedaluwarsa. Proses berkala serta
+pemeriksaan saat tindakan berizin atau pengajuan yang bersaing menegakkan
+kedaluwarsa. Daftar menampilkan status kedaluwarsa efektif meski proses
+berkala belum menyimpannya. Setiap transisi akhir menghapus kedua reservasi
+dan menulis riwayat dalam transaksi yang sama.
 
-4. RELATIONSHIPS
-- departments 1:N users, shift_types and shift_assignments.
-- users 1:N shift_assignments, shift_swap_requests (requester and target), approvals, and audit_logs.
-- shift_types 1:N shift_assignments; users N:M shift_types via employee_qualifications.
-- shift_assignments 1:N involvement in shift_swap_requests, each request referencing TWO assignments.
-- shift_swap_requests 1:N shift_swap_events.
-- shift_assignments 1:0..1 outgoing handover_reports, and 1:N incoming handover_reports.
-- handover_reports 1:N handover_tasks.
+Saat menyetujui, kunci sesuai §3 dan periksa ulang status, kedua reservasi,
+versi, kepemilikan, keanggotaan, aktivasi, status SCHEDULED, waktu mulai, tipe,
+kebijakan, aturan serah terima, dan jadwal akhir kedua karyawan. Jika lolos,
+ubah kedua pemilik dan versi, tangguhkan lalu jalankan batasan pengecualian,
+tetapkan APPROVED, hapus reservasi, serta catat keputusan dan dua perubahan
+kepemilikan dalam satu transaksi. Jika validasi pasti gagal, simpan CANCELLED
+dengan kode seperti ASSIGNMENT_CHANGED atau MINIMUM_REST_VIOLATION, audit
+percobaan persetujuan dan pelakunya, lalu kembalikan 409 tanpa mengubah
+penugasan. Kegagalan teknis membatalkan transaksi dan mempertahankan status
+menunggu. Tindakan ulang menghasilkan 409 dengan status terkini tanpa
+menduplikasi transisi. Perubahan jadwal atau persetujuan yang bersaing melihat
+hasil commit setelah menunggu, atau mendapat kegagalan yang dapat dicoba ulang.
 
-5. SWAP STATE MACHINE
-PENDING_PEER -- target accepts --> PENDING_APPROVAL
-PENDING_PEER -- target rejects --> REJECTED
-PENDING_APPROVAL -- supervisor approves + DB transaction passes --> APPROVED
-PENDING_APPROVAL -- supervisor rejects --> REJECTED
-PENDING_PEER / PENDING_APPROVAL -- requester cancels --> CANCELLED
-PENDING_PEER / PENDING_APPROVAL -- deadline reached --> EXPIRED
-All other transitions rejected; terminal states immutable except through explicit audited admin correction procedure outside MVP.
+6. SERAH TERIMA DAN TUGAS
+Departemen menjadi konteks operasional MVP. Cari penugasan penerima yang
+berbeda dan tidak dibatalkan, dengan pemilik karyawan aktif di departemen
+yang sama serta starts_at >= ends_at shift keluar. Urutkan berdasarkan
+starts_at. Jeda antarshift diperbolehkan. Jika beberapa penugasan memiliki
+waktu mulai paling awal yang sama, pemilik shift keluar memilih salah
+satunya. MVP tidak memasangkan shift yang tumpang tindih. Departemen yang
+memerlukan pola tersebut perlu menetapkan aturan pengganti atau area kerja.
+Jika tidak ada calon, kembalikan NO_RECIPIENT (409). Periksa pasangan saat
+menyimpan draf dan mengirim laporan. Tetapkan ID penerima saat pengiriman.
+Jika kemudian ada penugasan yang mulai lebih awal, laporan yang dikirim
+tetap mengarah ke penerima semula. Untuk menjaga riwayat, MVP melarang
+pembatalan dan penjadwalan ulang kedua penugasan pada laporan SUBMITTED atau
+ACKNOWLEDGED. Laporan dalam draf dapat dipasangkan ulang sebelum dikirim.
 
-6. SWAP APPROVAL TRANSACTION
-1) Begin database transaction and lock swap request row.
-2) Confirm status PENDING_APPROVAL, not expired, authorized supervisor, and current assignment references.
-3) Lock both assignment rows in deterministic ascending ID order to reduce deadlocks.
-4) Confirm current owners, version, active state, future time, department eligibility and no competing active reservations.
-5) Compute post-swap schedules for each employee, including other assignments outside the two being exchanged.
-6) Enforce non-overlap, minimum rest and qualifications against FINAL ownership, not original ownership.
-7) Update BOTH assignment employee_id values and versions within the same transaction.
-8) Mark swap APPROVED; append shift_swap_events and audit_logs in the same transaction.
-9) Commit; if any validation or database constraint fails, rollback all changes.
-Concurrency note: after design finalization, use appropriate row/employee schedule locking, database exclusion constraints, or transaction isolation to prevent a concurrent scheduler update violating the same invariants.
+DRAFT: Pemilik terkini shift keluar membuat satu laporan per penugasan,
+menyunting draf, dan mengelola tugas. Jika pemilik berganti sebelum laporan
+dikirim, pemilik sebelumnya kehilangan akses. Pemilik baru dapat membaca
+draf, lalu harus mengadopsinya secara eksplisit dengan versi terkini sebelum
+menyunting atau mengirim. Adopsi menjaga teks, tugas, dan atribusi asli tugas
+serta mengaudit ID pemilik draf lama dan baru. Pemilik baru meninjau isi
+warisan sebelum pengiriman. Periksa kepemilikan dengan kunci penugasan, termasuk
+jika pergantian terjadi lewat perubahan jadwal langsung. Isi laporan tetap
+utuh saat kepemilikan berubah.
 
-7. HANDOVER STATE MACHINE AND OWNERSHIP
-DRAFT -- outgoing employee submits --> SUBMITTED
-SUBMITTED -- current incoming assignment owner acknowledges --> ACKNOWLEDGED
-Acknowledgement is separate from task completion.
-For MVP, only one report per outgoing assignment; edits after submission are not allowed unless a future audited amendment workflow is explicitly designed. Authorized task status changes are permitted as separate history-recorded actions.
-Swap effects: if incoming assignment owner changes before acknowledgement, new current owner may acknowledge. If outgoing assignment owner changes, only its current owner may submit a DRAFT; stale draft attribution and resubmission behavior must be specified before migrations are final.
+DRAFT -> SUBMITTED: Pemilik terkini shift keluar yang memiliki draf setelah
+adopsi dapat mengirim laporan dengan ringkasan yang tidak kosong, kendala
+dan tugas opsional, serta penerima yang valid. Catat pelaku dan waktu. Isi
+dan penerima terkunci setelah dikirim. Mekanisme koreksi atau revisi ditunda
+hingga setelah MVP. Shift keluar yang telah dibatalkan tidak dapat dipakai
+untuk membuat atau mengirim laporan. Draf terlihat oleh Admin, Supervisor
+yang berwenang, dan pemilik terkini shift keluar.
 
-8. DATA VALIDATION AND INTEGRITY
-- starts_at < ends_at and non-null timestamps.
-- Distinct source and target assignments, requester != target_employee, and proper assignment ownership at time of action.
-- Scope supervisor to the affected department(s); cross-department swaps are OUT OF SCOPE for MVP unless both shifts are explicitly managed under a single supervisor scope.
-- Prevent invalid state transitions server-side, enforce optimistic version checks on edits where useful.
-- Protect against double approval and duplicate requests.
-- Ensure audit and transition events share transactions with the affected state change.
-- Distinguish SCHEDULED, CANCELLED and COMPLETED assignments in both availability and handover checks.
+SUBMITTED -> ACKNOWLEDGED: Pemilik terkini shift penerima dapat mengakui
+penerimaan sekali sejak shift penerima dimulai. Kunci penugasan penerima dan
+laporan, periksa penugasan tidak dibatalkan dan kepemilikan masih berlaku,
+lalu catat pelaku dan waktu. Pengakuan terlambat diperbolehkan pada penugasan
+yang telah selesai. Jika pemilik berganti sebelumnya, hak itu langsung
+beralih. Atribusi pengirim dan pengaku penerimaan tetap. Laporan terkirim
+dapat dibaca pengirim, pengaku penerimaan, pemilik terkini shift keluar atau
+penerima dalam lingkup yang sesuai, Admin, dan Supervisor berwenang. Mantan
+penerima yang belum mengakui penerimaan kehilangan akses saat dialihkan.
 
-9. PROPOSED API AREAS (NOT FINAL ENDPOINT CONTRACT)
-Authentication: session/login/logout; current user.
-Admin: users, departments, shift types, qualifications, system policies.
-Scheduling: assignments, calendar, employee schedule.
-Swaps: create request, list/detail, peer decision, supervisor decision, cancellation.
-Handovers: draft, submit, read, acknowledge, tasks.
-Audit: authorized history browsing.
-Exact HTTP methods, paths, errors, pagination and idempotency policies belong to the API contract in a later stage.
+Pengalihan shift penerima dengan laporan terkirim yang belum diakui
+mensyaratkan pemilik baru berupa karyawan aktif di departemen yang sama.
+Aturan ini berlaku pada pertukaran dan pengalihan langsung.
 
-10. TEST PLAN FOR CORE RULES
-T-01 Role and departmental authorization (positive/negative).
-T-02 Non-overlapping schedule creation including midnight crossover.
-T-03 Swap ownership and eligibility checks.
-T-04 Peer rejection leaves schedule untouched.
-T-05 Supervisor approval exchanges both owners atomically.
-T-06 Rest window and qualification failures block swaps.
-T-07 Concurrent swap request/reservation to same assignment rejected.
-T-08 Concurrent approval / schedule edit cannot violate invariants.
-T-09 Expired/cancelled requests cannot be approved.
-T-10 Only outgoing owner may submit handover.
-T-11 Only current recipient assignment owner may acknowledge.
-T-12 Task statuses independent of acknowledgement; audit history survives updates.
+Isi tugas hanya dapat ditambah, disunting, atau dihapus saat DRAFT oleh
+pemilik terkini yang mengadopsi draf. Saat dikirim, status tugas dimulai dari
+OPEN. Setelah pengiriman, pemilik terkini shift penerima dan Supervisor
+berwenang dapat mengubah OPEN -> IN_PROGRESS atau DONE, IN_PROGRESS -> OPEN
+atau DONE, dan DONE -> OPEN. Pengakuan penerimaan tidak mengubah status
+tugas. Periksa kepemilikan terkini dan versi tugas, lalu audit perubahan
+status dan penghapusan tugas dengan ID dan waktu. Penyuntingan draf, adopsi,
+pengiriman, pengakuan penerimaan, dan perubahan status mengikuti penguncian
+yang sama dengan penjadwalan dan mencatat audit dalam transaksinya.
 
-11. STAGE 2 OPEN ITEMS / DESIGN REVIEW CHECKLIST
-D-01 Finalize cross-column assignment reservation strategy for active swaps (possibly shift_swap_participants or reservation rows, adding a 12th table).
-D-02 Finalize PostgreSQL exclusion constraint and transaction locking strategy for scheduling conflicts and concurrent writes.
-D-03 Determine qualification representation: current shift_type-specific eligibility vs separate positions/skills.
-D-04 Define department scope, supervisor membership, and cross-department rules.
-D-05 Decide handover pairing semantics and revision policy after a swap.
-D-06 Define configurable defaults and validation ranges for rest, expiry and minimum notice.
-D-07 Confirm handling of shifts and assignments after completion and how historical handovers remain accessible.
-D-08 Establish minimal API error/status contract and reusable frontend permission rules.
-D-09 Define database retention/privacy scope of logs and status change records.
+7. NILAI KEBIJAKAN DAN HASIL TINJAUAN
+Usulan nilai demo yang masih berupa asumsi:
+- minimum_rest_minutes = 660, bilangan bulat 0..1440.
+- request_notice_minutes = 1440, bilangan bulat 0..10080.
+- swap_expiration_hours = 48, bilangan bulat 1..168.
+- max_shift_minutes = 720, bilangan bulat 1..1440 menit aktual.
+- organization_timezone = Asia/Bangkok, pengenal zona waktu IANA yang valid.
+Perubahan kebijakan berlaku untuk validasi berikutnya. Periksa kembali
+istirahat, kualifikasi, dan durasi shift saat persetujuan. Tenggat yang sudah
+disimpan tetap berlaku. Perubahan tenggat pengajuan hanya berlaku untuk
+permintaan baru. Perubahan zona waktu memengaruhi tampilan dan penafsiran
+templat berikutnya. Waktu absolut yang sudah disimpan tetap. Cantumkan selisih
+zona waktu untuk waktu penugasan, termasuk jika waktu lokal ambigu.
 
-12. STAGE 2 STATUS
-Conceptual architecture: drafted.
-Logical entities and relationships: drafted (11 provisional tables).
-Swap/handover transitions: drafted.
-Critical concurrency and handover edge cases: documented, NOT fully resolved.
-Schema migrations: not started.
-Backend/frontend implementation: not started.
-Automated test suite: not started.
-Git commit/push: only after review; do not claim completed without terminal evidence.
+D-01 TUNTAS — PK reservasi ternormalisasi dan pengelolaan dua baris (§2, §5).
+D-02 TUNTAS — batasan pengecualian yang dapat ditangguhkan dan urutan kunci (§3).
+D-03 TUNTAS — kualifikasi per tipe shift dengan masa berlaku opsional (§2).
+D-04 TUNTAS — satu departemen dan larangan pertukaran lintas departemen (§4).
+D-05 TUNTAS UNTUK MVP — aturan penerima berikutnya, adopsi diaudit, revisi ditunda (§6).
+D-06 SEMENTARA — pengaturan dan rentang ditetapkan. Konfirmasi nilai operasional (§7).
+D-07 TUNTAS — siklus penugasan dan akses riwayat ditetapkan (§3, §6).
+D-08 TUNTAS UNTUK API AWAL — kontrak dan aturan izin (§4 dan dokumen pendamping).
+D-09 SEMENTARA — privasi dan retensi demo ditetapkan. Setujui retensi data nyata.
+
+Pemetaan keputusan SRS: OD-01 -> D-06; OD-02 -> D-03; OD-03 -> D-04;
+OD-04/05/06 -> D-05 (dan D-07 untuk riwayat); OD-07 -> §5; OD-08 -> §1/§7.
+
+Tinjauan eksternal menjadi masukan. Usulan untuk memilih penugasan mendatang
+secara bebas dalam departemen dapat melewati shift berikutnya yang
+disyaratkan SRS §8.1. Karena itu §6 membatasi pilihan ke waktu mulai paling
+awal yang memenuhi syarat. Tinjauan hanya memasukkan SCHEDULED pada batasan
+pengecualian. Desain ini juga memasukkan interval COMPLETED untuk aturan
+tumpang tindih dan istirahat BR-05/BR-06. Hak baca Admin tidak memberi hak
+keputusan supervisor (SRS FR-07). Dokumen pendamping memetakan AC-01–AC-12.
+Pada Tahap 3, konfirmasi nilai kebijakan dan tinjau asumsi desain sebelum
+menetapkan skema migrasi. Implementasi skema dan API serta penulisan dan
+pelaksanaan pengujian belum dimulai.
