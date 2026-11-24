@@ -1,0 +1,204 @@
+GILIRAN
+Employee Shift Swap & Handover Management System
+DOCUMENT 02 — SYSTEM ARCHITECTURE & DATABASE DESIGN
+Version: 0.2 (Stage 2 draft — review required)
+Status: Conceptual / preliminary logical design, not implemented
+Dependencies: docs/01_requirements.txt
+
+1. DESIGN GOALS AND BOUNDARIES
+- Support two-party swap plus supervisor approval, and outgoing-to-incoming handover.
+- Preserve data integrity for concurrent requests and across time boundaries.
+- Make policy decisions configurable and actions auditable.
+- Keep the MVP a modular monolith instead of prematurely introducing microservices.
+- No claim that migrations or endpoints have been implemented.
+
+2. HIGH-LEVEL ARCHITECTURE
+Browser (React + TypeScript + Tailwind + FullCalendar)
+    |
+    | HTTPS / JSON REST requests
+    v
+Laravel REST API (Sanctum authentication, authorization, request validation)
+    |
+    +-- Identity & Department Module
+    +-- Scheduling Module
+    +-- Swap Workflow Module
+    +-- Handover & Task Module
+    +-- Audit Module
+    +-- Policy Module
+    |
+    v
+PostgreSQL (transactional database)
+
+Architecture rules:
+- All authoritative role, ownership, concurrency and policy checks run on server.
+- UI status labels reflect backend workflow states rather than making authoritative decisions.
+- Backend services encapsulate workflow transitions; controllers should not embed swap transaction logic.
+- Store timestamps in UTC/timestamptz and present using the organization's configured timezone.
+
+3. CORE ENTITIES (11 TABLES, PRELIMINARY)
+
+3.1 departments
+id BIGINT PK; name VARCHAR(120) NOT NULL UNIQUE; active BOOLEAN NOT NULL DEFAULT TRUE; created_at/updated_at.
+
+3.2 users
+id BIGINT PK; department_id BIGINT FK departments.id (MVP single department); name VARCHAR(160) NOT NULL;
+email VARCHAR(255) UNIQUE NOT NULL; password VARCHAR(255) NOT NULL (hash);
+role VARCHAR(20) NOT NULL CHECK IN ('ADMIN','SUPERVISOR','EMPLOYEE');
+active BOOLEAN NOT NULL DEFAULT TRUE; created_at/updated_at.
+Note: an ADMIN may be unassigned to a department; supervisor department scopes must be enforced. For multiple departments per supervisor, add a membership table in the next schema review.
+
+3.3 shift_types
+id BIGINT PK; department_id BIGINT FK departments.id; name VARCHAR(100) NOT NULL;
+start_local_time TIME; end_local_time TIME; active BOOLEAN DEFAULT TRUE;
+created_at/updated_at.
+Note: shift templates are defaults; actual assignments carry concrete start/end instants, including overnight cases.
+
+3.4 shift_assignments
+id BIGINT PK; employee_id BIGINT FK users.id NOT NULL; department_id BIGINT FK departments.id NOT NULL;
+shift_type_id BIGINT FK shift_types.id NULL; starts_at TIMESTAMPTZ NOT NULL; ends_at TIMESTAMPTZ NOT NULL;
+status VARCHAR(20) NOT NULL CHECK IN ('SCHEDULED','CANCELLED','COMPLETED');
+version INTEGER NOT NULL DEFAULT 1; created_by BIGINT FK users.id; created_at/updated_at;
+CHECK (ends_at > starts_at).
+Indexes (employee_id, starts_at), (department_id, starts_at), (status, starts_at).
+Integrity: prevent overlapping active assignments for each employee using PostgreSQL exclusion constraint on tstzrange, with btree_gist and a partial predicate for SCHEDULED assignments (or equivalent locked validation with tests). Exact migration to be reviewed.
+
+3.5 employee_qualifications
+id BIGINT PK; employee_id BIGINT FK users.id; shift_type_id BIGINT FK shift_types.id;
+valid_from DATE NULL; valid_until DATE NULL; UNIQUE(employee_id, shift_type_id).
+Note: preliminary simplified model assumes shift-type qualification; may require distinct qualification/position entities if organization uses skill requirements.
+
+3.6 shift_swap_requests
+id BIGINT PK; requester_id BIGINT FK users.id; target_employee_id BIGINT FK users.id;
+source_assignment_id BIGINT FK shift_assignments.id; target_assignment_id BIGINT FK shift_assignments.id;
+status VARCHAR(30) NOT NULL CHECK IN ('PENDING_PEER','PENDING_APPROVAL','APPROVED','REJECTED','CANCELLED','EXPIRED');
+reason TEXT NULL; peer_responded_at TIMESTAMPTZ NULL; supervisor_id BIGINT FK users.id NULL;
+supervisor_decided_at TIMESTAMPTZ NULL; expires_at TIMESTAMPTZ NOT NULL;
+source_version_at_request INTEGER; target_version_at_request INTEGER;
+created_at/updated_at; CHECK (source_assignment_id <> target_assignment_id);
+Indexes on requester, target_employee, status, expires_at.
+IMPORTANT: a unique index on each of source_assignment_id and target_assignment_id alone does NOT prevent the same assignment appearing in the other column of a separate active swap. Use a separate normalized reservation table or an equivalent database-serialized lock/constraint scheme. This is an unresolved physical-schema decision, not a completed guarantee.
+
+3.7 shift_swap_events
+id BIGINT PK; swap_request_id BIGINT FK shift_swap_requests.id; actor_id BIGINT FK users.id;
+event_type VARCHAR(40) NOT NULL; from_status VARCHAR(30) NULL; to_status VARCHAR(30) NULL;
+note TEXT NULL; created_at TIMESTAMPTZ NOT NULL DEFAULT now().
+Append-only event stream for swap decisions and transitions.
+
+3.8 handover_reports
+id BIGINT PK; source_assignment_id BIGINT FK shift_assignments.id UNIQUE NOT NULL;
+recipient_assignment_id BIGINT FK shift_assignments.id NOT NULL;
+summary TEXT; issues TEXT; status VARCHAR(20) NOT NULL CHECK IN ('DRAFT','SUBMITTED','ACKNOWLEDGED');
+submitted_at TIMESTAMPTZ NULL; submitted_by BIGINT FK users.id NULL;
+acknowledged_by BIGINT FK users.id NULL; acknowledged_at TIMESTAMPTZ NULL;
+version INTEGER NOT NULL DEFAULT 1; created_at/updated_at;
+CHECK (source_assignment_id <> recipient_assignment_id).
+When recipient ownership changes due to swap, acknowledgement must check CURRENT assignment ownership, not a cached person ID.
+
+3.9 handover_tasks
+id BIGINT PK; handover_report_id BIGINT FK handover_reports.id;
+title VARCHAR(255) NOT NULL; details TEXT NULL;
+status VARCHAR(20) NOT NULL CHECK IN ('OPEN','IN_PROGRESS','DONE');
+created_by BIGINT FK users.id; updated_by BIGINT FK users.id NULL; created_at/updated_at.
+No automatic DONE transition on report acknowledgement.
+
+3.10 audit_logs
+id BIGINT PK; actor_id BIGINT FK users.id NULL; action VARCHAR(80) NOT NULL;
+entity_type VARCHAR(60) NOT NULL; entity_id BIGINT NULL;
+metadata JSONB NOT NULL DEFAULT '{}'; created_at TIMESTAMPTZ NOT NULL DEFAULT now().
+Avoid storing passwords, tokens or excessive personal data in audit metadata; append-only.
+
+3.11 system_settings
+id BIGINT PK; setting_key VARCHAR(100) UNIQUE NOT NULL; setting_value JSONB NOT NULL;
+updated_by BIGINT FK users.id NULL; updated_at TIMESTAMPTZ NOT NULL DEFAULT now().
+Examples: minimum_rest_minutes, request_notice_minutes, swap_expiration_hours, organization_timezone.
+Validation/range rules for each key should be enforced by application services.
+
+4. RELATIONSHIPS
+- departments 1:N users, shift_types and shift_assignments.
+- users 1:N shift_assignments, shift_swap_requests (requester and target), approvals, and audit_logs.
+- shift_types 1:N shift_assignments; users N:M shift_types via employee_qualifications.
+- shift_assignments 1:N involvement in shift_swap_requests, each request referencing TWO assignments.
+- shift_swap_requests 1:N shift_swap_events.
+- shift_assignments 1:0..1 outgoing handover_reports, and 1:N incoming handover_reports.
+- handover_reports 1:N handover_tasks.
+
+5. SWAP STATE MACHINE
+PENDING_PEER -- target accepts --> PENDING_APPROVAL
+PENDING_PEER -- target rejects --> REJECTED
+PENDING_APPROVAL -- supervisor approves + DB transaction passes --> APPROVED
+PENDING_APPROVAL -- supervisor rejects --> REJECTED
+PENDING_PEER / PENDING_APPROVAL -- requester cancels --> CANCELLED
+PENDING_PEER / PENDING_APPROVAL -- deadline reached --> EXPIRED
+All other transitions rejected; terminal states immutable except through explicit audited admin correction procedure outside MVP.
+
+6. SWAP APPROVAL TRANSACTION
+1) Begin database transaction and lock swap request row.
+2) Confirm status PENDING_APPROVAL, not expired, authorized supervisor, and current assignment references.
+3) Lock both assignment rows in deterministic ascending ID order to reduce deadlocks.
+4) Confirm current owners, version, active state, future time, department eligibility and no competing active reservations.
+5) Compute post-swap schedules for each employee, including other assignments outside the two being exchanged.
+6) Enforce non-overlap, minimum rest and qualifications against FINAL ownership, not original ownership.
+7) Update BOTH assignment employee_id values and versions within the same transaction.
+8) Mark swap APPROVED; append shift_swap_events and audit_logs in the same transaction.
+9) Commit; if any validation or database constraint fails, rollback all changes.
+Concurrency note: after design finalization, use appropriate row/employee schedule locking, database exclusion constraints, or transaction isolation to prevent a concurrent scheduler update violating the same invariants.
+
+7. HANDOVER STATE MACHINE AND OWNERSHIP
+DRAFT -- outgoing employee submits --> SUBMITTED
+SUBMITTED -- current incoming assignment owner acknowledges --> ACKNOWLEDGED
+Acknowledgement is separate from task completion.
+For MVP, only one report per outgoing assignment; edits after submission are not allowed unless a future audited amendment workflow is explicitly designed. Authorized task status changes are permitted as separate history-recorded actions.
+Swap effects: if incoming assignment owner changes before acknowledgement, new current owner may acknowledge. If outgoing assignment owner changes, only its current owner may submit a DRAFT; stale draft attribution and resubmission behavior must be specified before migrations are final.
+
+8. DATA VALIDATION AND INTEGRITY
+- starts_at < ends_at and non-null timestamps.
+- Distinct source and target assignments, requester != target_employee, and proper assignment ownership at time of action.
+- Scope supervisor to the affected department(s); cross-department swaps are OUT OF SCOPE for MVP unless both shifts are explicitly managed under a single supervisor scope.
+- Prevent invalid state transitions server-side, enforce optimistic version checks on edits where useful.
+- Protect against double approval and duplicate requests.
+- Ensure audit and transition events share transactions with the affected state change.
+- Distinguish SCHEDULED, CANCELLED and COMPLETED assignments in both availability and handover checks.
+
+9. PROPOSED API AREAS (NOT FINAL ENDPOINT CONTRACT)
+Authentication: session/login/logout; current user.
+Admin: users, departments, shift types, qualifications, system policies.
+Scheduling: assignments, calendar, employee schedule.
+Swaps: create request, list/detail, peer decision, supervisor decision, cancellation.
+Handovers: draft, submit, read, acknowledge, tasks.
+Audit: authorized history browsing.
+Exact HTTP methods, paths, errors, pagination and idempotency policies belong to the API contract in a later stage.
+
+10. TEST PLAN FOR CORE RULES
+T-01 Role and departmental authorization (positive/negative).
+T-02 Non-overlapping schedule creation including midnight crossover.
+T-03 Swap ownership and eligibility checks.
+T-04 Peer rejection leaves schedule untouched.
+T-05 Supervisor approval exchanges both owners atomically.
+T-06 Rest window and qualification failures block swaps.
+T-07 Concurrent swap request/reservation to same assignment rejected.
+T-08 Concurrent approval / schedule edit cannot violate invariants.
+T-09 Expired/cancelled requests cannot be approved.
+T-10 Only outgoing owner may submit handover.
+T-11 Only current recipient assignment owner may acknowledge.
+T-12 Task statuses independent of acknowledgement; audit history survives updates.
+
+11. STAGE 2 OPEN ITEMS / DESIGN REVIEW CHECKLIST
+D-01 Finalize cross-column assignment reservation strategy for active swaps (possibly shift_swap_participants or reservation rows, adding a 12th table).
+D-02 Finalize PostgreSQL exclusion constraint and transaction locking strategy for scheduling conflicts and concurrent writes.
+D-03 Determine qualification representation: current shift_type-specific eligibility vs separate positions/skills.
+D-04 Define department scope, supervisor membership, and cross-department rules.
+D-05 Decide handover pairing semantics and revision policy after a swap.
+D-06 Define configurable defaults and validation ranges for rest, expiry and minimum notice.
+D-07 Confirm handling of shifts and assignments after completion and how historical handovers remain accessible.
+D-08 Establish minimal API error/status contract and reusable frontend permission rules.
+D-09 Define database retention/privacy scope of logs and status change records.
+
+12. STAGE 2 STATUS
+Conceptual architecture: drafted.
+Logical entities and relationships: drafted (11 provisional tables).
+Swap/handover transitions: drafted.
+Critical concurrency and handover edge cases: documented, NOT fully resolved.
+Schema migrations: not started.
+Backend/frontend implementation: not started.
+Automated test suite: not started.
+Git commit/push: only after review; do not claim completed without terminal evidence.

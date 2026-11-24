@@ -1,0 +1,169 @@
+GILIRAN
+Employee Shift Swap & Handover Management System
+DOCUMENT 01 — SOFTWARE REQUIREMENTS SPECIFICATION (SRS)
+Version: 1.0 (MVP baseline)
+Status: Requirements baseline for design; not implemented
+
+1. PROJECT OVERVIEW
+GILIRAN is a responsive web application for teams working in scheduled shifts. It combines two core workflows: employee-to-employee shift swaps, approved by a supervisor, and structured work handovers between consecutive shifts. It is intended as a full-stack portfolio project and a configurable foundation for organizations operating in shifts.
+
+2. PROBLEM STATEMENT
+- Swap requests handled through private chats are difficult to trace and approve consistently.
+- Schedule edits can introduce overlaps, insufficient rest, or unqualified assignments.
+- Incoming shifts can miss operational issues and unfinished tasks.
+- Managers lack a clear audit history of who changed or acknowledged shift-related records.
+
+3. PROJECT OBJECTIVES
+OBJ-01 Centralize employee assignments and shift-swap requests.
+OBJ-02 Require peer acceptance and supervisor approval before changing a schedule.
+OBJ-03 Detect scheduling conflicts and enforce configured organizational rules.
+OBJ-04 Record structured handover notes and unfinished tasks between shifts.
+OBJ-05 Retain traceable decisions and schedule changes.
+OBJ-06 Offer a responsive interface for employees, supervisors, and administrators.
+
+4. USERS AND ACCESS CONTROL
+4.1 Employee
+- View own assignments and permitted team calendar entries.
+- Request a two-way swap involving an assignment they own.
+- Accept/reject swap requests addressed to them.
+- Write and submit a handover for their assigned shift; acknowledge a handover when they own the designated recipient assignment.
+- View own requests, assigned handovers, and relevant open tasks.
+
+4.2 Supervisor
+- View and maintain shift assignments for managed departments/teams.
+- Review peer-accepted swap requests and approve/reject them.
+- Review handovers and outstanding tasks within their responsibility.
+- View scoped history and audit records.
+
+4.3 Admin
+- Manage accounts, employee-to-department membership, roles, shift types, qualifications, and system rules.
+- Review organization-wide records and audit history.
+- Admin privileges do not bypass audit logging or scheduling integrity checks.
+
+Authorization: every read/write operation must enforce role, team scope, and ownership on the backend. Frontend hiding alone is insufficient.
+
+5. FUNCTIONAL REQUIREMENTS
+FR-01 Authentication: login, logout, authenticated session, and password-protected accounts.
+FR-02 User Management: admin creates/updates/deactivates users, assigns a role and department; activated employees must have valid team membership.
+FR-03 Shift Scheduling: supervisors create/update assignments within managed departments, subject to validity and overlap rules.
+FR-04 Shift Visibility: employees view their own assignments and a permitted team calendar; sensitive employee details are scoped.
+FR-05 Shift Swap Request: employee selects their own future active assignment and another employee's eligible future assignment to propose a direct two-way exchange; records request and reason.
+FR-06 Peer Decision: targeted employee accepts or rejects a pending request; actions are authenticated, scoped and idempotently protected against double processing.
+FR-07 Supervisor Decision: authorized supervisor approves or rejects a peer-accepted request; approval applies the exchange atomically.
+FR-08 Conflict Detection: validate ownership, overlapping assignments, minimum rest, relevant shift qualification, status, and competing active requests; revalidate at approval.
+FR-09 Handover Authoring: outgoing assigned employee saves draft and submits handover notes, issues, and relevant context for a defined incoming assignment.
+FR-10 Handover Acknowledgement: designated incoming employee acknowledges a submitted handover; time and actor are recorded.
+FR-11 Task Tracking: handover report contains open/in-progress/done follow-up tasks visible to relevant staff; task changes are permission-checked.
+FR-12 Audit Trail: important assignment, swap, and handover actions are appended with timestamp, actor, affected entity, and change summary.
+
+6. NON-FUNCTIONAL REQUIREMENTS
+NFR-01 Security: hash passwords; authenticated API; server-side RBAC and ownership authorization; protect against mass assignment and inappropriate data exposure.
+NFR-02 Integrity: swap approval uses one database transaction; either both assignments, request status, and audit record update, or none do.
+NFR-03 Usability: responsive desktop/mobile experience; status and decision history are understandable.
+NFR-04 Performance: initial target for normal API reads is under 1 second in an agreed local test workload; actual performance must be measured, not assumed.
+NFR-05 Reliability: retries or concurrent actions cannot apply the same swap twice.
+NFR-06 Auditability: capture who acted, what changed and when; historical records are not silently rewritten.
+NFR-07 Maintainability: separate frontend, API, business services and persistence.
+NFR-08 Testability: automate key validation and status-transition scenarios; use isolated test fixtures.
+NFR-09 Time handling: store scheduled start/end as timezone-aware instants; display in configured organizational timezone.
+NFR-10 Privacy: minimize employee personal data; apply departmental access boundaries.
+
+7. SHIFT SWAP WORKFLOW
+7.1 Preconditions
+- Both participating employees are active and eligible.
+- Both shift assignments exist, are distinct, active, and have not started.
+- Requester owns the source; target employee owns the target.
+- No active swap request currently reserves either assignment.
+7.2 Statuses
+PENDING_PEER -> PENDING_APPROVAL -> APPROVED.
+Alternate terminal results: REJECTED, CANCELLED, EXPIRED.
+7.3 Main flow
+1) Employee A proposes a two-way swap of their assignment with Employee B's assignment.
+2) System validates eligibility and persists request as PENDING_PEER.
+3) Employee B accepts; status becomes PENDING_APPROVAL; or rejects -> REJECTED.
+4) An authorized supervisor revalidates current assignments, conflicts, rest and qualifications.
+5) Approval exchanges ownership atomically and sets APPROVED; rejection sets REJECTED.
+6) Record decision and affected assignment changes in immutable history.
+7.4 Exceptions
+- Requester may cancel while pending; request expiry is enforced before actions.
+- Changed/inactive/started assignments or conflicting concurrent requests block approval with a clear reason; no partial exchange is allowed.
+- Repeated decisions must not apply the swap more than once.
+
+8. SHIFT HANDOVER WORKFLOW
+8.1 Preconditions
+- An outgoing assignment and an identified next/recipient assignment are defined for the same operating context (team or work area).
+- Incoming assignee is determined from the recipient assignment at acknowledgement time.
+8.2 Statuses
+DRAFT -> SUBMITTED -> ACKNOWLEDGED.
+Task statuses: OPEN, IN_PROGRESS, DONE. Acknowledging a report does not mark tasks DONE.
+8.3 Main flow
+1) Outgoing assigned employee creates a handover draft for their shift.
+2) Draft contains summary, issues, and follow-up tasks (if any).
+3) Outgoing employee submits the report; submission actor and time are saved.
+4) Current assignee of the designated recipient shift reviews and acknowledges it.
+5) System records acknowledgement, while tasks remain independently trackable.
+8.4 Exceptions
+- An unauthorized employee cannot submit or acknowledge.
+- A submitted report cannot be silently overwritten; corrections require an auditable revision process (deferred to design decision).
+- A recipient assignment whose owner changes due to a swap must be rechecked when acknowledgement occurs.
+
+9. BUSINESS RULES
+BR-01 Only a currently assigned employee may request a swap of their active assignment.
+BR-02 Both assignments must be future and not yet started at creation and final approval.
+BR-03 Only the targeted employee can accept or reject the peer request.
+BR-04 Supervisor approval is required before any actual schedule exchange.
+BR-05 Assignments of the same employee must not overlap; overlap uses [starts_at, ends_at) intervals.
+BR-06 Enforce configurable minimum rest between adjacent shifts, including overnight shifts.
+BR-07 Enforce employee eligibility/qualification for the incoming assignment.
+BR-08 At most one active swap request may involve an assignment at a time.
+BR-09 Revalidate ownership, timings and policy at approval in a transaction protected against race conditions.
+BR-10 Only the employee assigned to the outgoing shift may author or submit its handover; supervisor administrative correction, if introduced, requires a separate audited permission.
+BR-11 Only the employee owning the designated recipient shift at acknowledgement may acknowledge the submitted handover.
+BR-12 Log swap decisions, assignment ownership changes, and handover transitions with actor and timestamp.
+
+10. MVP IN-SCOPE / OUT-OF-SCOPE
+10.1 IN SCOPE (v1.0)
+- Authentication and basic role management for Employee, Supervisor, Admin.
+- Departments, shift definitions and assignment calendar.
+- Two-way shift swap proposal, peer decision, supervisor approval, automatic conflict checks.
+- Handover drafts, submissions, acknowledgement and task status.
+- Audit logs and minimal configurable policies.
+10.2 OUT OF SCOPE (v1.1+)
+- Automatic shift optimization, open-shift claims, attendance/GPS, payroll, leave management.
+- WhatsApp/email and real-time push notifications.
+- Advanced analytics, staffing forecasts, AI recommendations, attachments, multi-tenant billing.
+
+11. PROPOSED TECHNOLOGY STACK
+- Frontend: React, TypeScript, Tailwind CSS, FullCalendar.
+- Backend: Laravel REST API, Laravel Sanctum.
+- Database: PostgreSQL; transactional updates and indexed relationships.
+- Tests: Pest (backend), Playwright (end-to-end).
+- Development: Git, GitHub, Docker Compose.
+These are design choices, not installed or implemented components.
+
+12. MVP ACCEPTANCE CRITERIA
+AC-01 Admin can create an employee, assign a role, and place the employee in a department.
+AC-02 Supervisor can publish two non-overlapping assignments within their department.
+AC-03 Employee sees their own scheduled assignments.
+AC-04 Employee A can request exchange of two eligible future assignments with Employee B.
+AC-05 Employee B can accept or reject; a rejection never changes either assignment.
+AC-06 Only authorized supervisor can finally approve; approved exchange updates both owners together.
+AC-07 An overlapping or rest-violating swap is rejected without modifying the schedule.
+AC-08 Two concurrent approvals cannot cause a double swap or partial state.
+AC-09 Outgoing employee can submit a handover to a designated recipient shift.
+AC-10 Recipient employee can acknowledge, but unrelated employees cannot.
+AC-11 Unfinished tasks remain open after acknowledgement and can later be updated with audit history.
+AC-12 Key actions have traceable actor, timestamp and outcome in audit history.
+
+13. OPEN DECISIONS TO FINALIZE BEFORE IMPLEMENTATION
+OD-01 Organizational policy defaults: shift length, notice period, min rest and expiry duration.
+OD-02 Whether shifts require position-specific qualifications; define matching data model.
+OD-03 Whether supervisors may oversee more than one department and whether an employee may belong to multiple departments.
+OD-04 How outgoing and incoming assignments are paired when shifts overlap or there is a gap.
+OD-05 Correction policy for submitted handovers and task edit permissions.
+OD-06 Conflict behavior when a swap changes a handover author or recipient before submission/acknowledgement.
+OD-07 Precise statuses for a failed approval validation versus expiry/rejection.
+OD-08 Timezone scope: one timezone per organization for MVP.
+
+14. IMPLEMENTATION STATUS
+Requirements drafted for Stage 1. No source code, database, test run or deployment is claimed. Stage 2 design must resolve the open decisions before schema migrations are frozen.
