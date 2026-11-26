@@ -18,5 +18,9 @@ Buka `http://localhost:5173`. Vite meneruskan `/api` dan `/sanctum` ke backend l
 - Karyawan melihat shift miliknya.
 - Supervisor melihat kalender tim dan bisa menambah, mengubah, atau membatalkan penugasan yang diizinkan API.
 - Admin melihat kalender organisasi dan dapat menyaringnya berdasarkan departemen.
+- Di menu Tukar shift, karyawan dapat mengajukan pertukaran dengan rekan satu
+  departemen, menanggapi permintaan masuk, dan membatalkan pengajuan yang masih
+  menunggu. Supervisor memutuskan permintaan yang sudah diterima rekan. Admin
+  dapat membaca permintaan dan riwayatnya.
 
 Jalankan `npm run build` untuk memeriksa tipe TypeScript dan menghasilkan `dist/`. Di lingkungan produksi, sajikan `dist/`, API, dan rute CSRF dari origin HTTPS yang sama. Konfigurasikan domain stateful Sanctum dan kuki Secure pada backend.

@@ -18,7 +18,12 @@ docker compose up -d
 
 Perintah demo menampilkan kata sandi acak hanya untuk akun yang baru dibuat.
 Gunakan `http://localhost:8000` untuk layanan lokal. Compose menggunakan HTTP
-hanya pada loopback untuk pengembangan. Gunakan HTTPS dan kuki Secure pada
+hanya pada loopback untuk pengembangan. Saat layanan API dimulai, Compose
+menyalin proyek dan dependensi ke filesystem container. Jalankan
+`docker compose restart api` setelah mengubah kode backend, konfigurasi, atau
+dependensi agar server membaca perubahan tersebut. Jalankan perintah Artisan
+untuk setup dari direktori proyek seperti pada langkah di atas.
+Gunakan HTTPS dan kuki Secure pada
 lingkungan selain lokal. Setel header Origin atau Referer dengan asal yang sama
 saat menguji API sesi melalui klien HTTP.
 

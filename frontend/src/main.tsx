@@ -4,6 +4,7 @@ import type { FormEvent } from 'react'
 import { ApiError, errorMessage, read, write } from './api'
 import type { User } from './api'
 import { Schedule } from './schedule'
+import { Swaps } from './swaps'
 import './style.css'
 
 const roles = { ADMIN: 'Admin', SUPERVISOR: 'Supervisor', EMPLOYEE: 'Karyawan' }
@@ -18,6 +19,13 @@ function App() {
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState('')
   const [startupError, setStartupError] = useState('')
+  const [swapPage, setSwapPage] = useState(() => location.hash === '#tukar-shift')
+
+  useEffect(() => {
+    function updatePage() { setSwapPage(location.hash === '#tukar-shift') }
+    window.addEventListener('hashchange', updatePage)
+    return () => window.removeEventListener('hashchange', updatePage)
+  }, [])
 
   const restore = useCallback(async () => {
     setChecking(true)
@@ -44,8 +52,8 @@ function App() {
     setPending(true)
     setNotice('')
     try {
-      await write('/auth/login', 'POST', { email: fields.get('email'), password: fields.get('password') })
-      setUser(await read<User>('/auth/me'))
+      const account = await write<User>('/auth/login', 'POST', { email: fields.get('email'), password: fields.get('password') })
+      setUser(account ?? await read<User>('/auth/me'))
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) await restore()
       else setNotice(errorMessage(error))
@@ -94,16 +102,21 @@ function App() {
     <header className="topbar">
       <div className="frame topbar-inner">
         <Brand />
-        <nav aria-label="Navigasi utama"><a href="#jadwal" aria-current="page">{title}</a></nav>
+        <nav aria-label="Navigasi utama" className="flex flex-wrap gap-2">
+          <a href="#jadwal" aria-current={swapPage ? undefined : 'page'}>{title}</a>
+          <a href="#tukar-shift" aria-current={swapPage ? 'page' : undefined}>Tukar shift</a>
+        </nav>
         <div className="account">
           <div><strong>{user.name}</strong><span>{roles[user.role]}</span></div>
           <button disabled={pending} onClick={() => void logout()}>{pending ? 'Keluar…' : 'Keluar'}</button>
         </div>
       </div>
     </header>
-    <main id="jadwal" className="frame workspace">
+    <main className="frame workspace">
       {notice && <p role="alert" className="error">{notice}</p>}
-      <Schedule key={user.id} user={user} title={title} onExpired={expire} />
+      {swapPage
+        ? <Swaps key={user.id} user={user} onExpired={expire} />
+        : <Schedule key={user.id} user={user} title={title} onExpired={expire} />}
     </main>
   </>
 }

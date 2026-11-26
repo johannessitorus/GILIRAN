@@ -16,7 +16,7 @@ button.danger { @apply border-red-700 bg-red-700 text-white; }
 button.danger:hover:enabled { @apply bg-red-800; }
 :focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; }
 label { @apply grid gap-1 text-sm font-semibold; }
-input, select { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base font-normal; }
+input, select, textarea { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base font-normal; }
 select {
   appearance: none;
   padding-right: 2rem;
@@ -41,7 +41,8 @@ h1 { @apply text-3xl font-bold tracking-tight sm:text-4xl; }
 .login-panel .brand { @apply mb-4; }
 .topbar { @apply border-b border-slate-200 bg-white; }
 .topbar-inner { @apply flex min-h-16 flex-wrap items-center gap-x-6 gap-y-3 py-3; }
-.topbar nav a { @apply rounded-md bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800; }
+.topbar nav a { @apply rounded-md px-3 py-2 text-sm font-semibold text-slate-700; }
+.topbar nav a:hover, .topbar nav a[aria-current] { @apply bg-blue-50 text-blue-800; }
 .account { @apply ml-auto flex items-center gap-3; }
 .account strong, .account span { @apply block text-sm; }
 .account span { @apply text-slate-600; }
