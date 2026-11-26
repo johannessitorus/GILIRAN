@@ -5,6 +5,7 @@ import { ApiError, errorMessage, read, write } from './api'
 import type { User } from './api'
 import { Schedule } from './schedule'
 import { Swaps } from './swaps'
+import { Handovers } from './handovers'
 import { AccountForm, Business, isAccountPage } from './accounts'
 import './style.css'
 
@@ -25,6 +26,7 @@ function App() {
   const [page, search] = route.split('?')
   const params = new URLSearchParams(search)
   const swapPage = page === 'tukar-shift'
+  const handoverPage = page === 'serah-terima'
   const businessPage = page === 'usaha' && user?.role === 'ADMIN'
 
   useEffect(() => {
@@ -136,8 +138,9 @@ function App() {
       <div className="frame topbar-inner">
         <Brand />
         <nav aria-label="Navigasi utama" className="flex flex-wrap gap-2">
-          <a href="#jadwal" aria-current={swapPage || businessPage ? undefined : 'page'}>{title}</a>
+          <a href="#jadwal" aria-current={swapPage || handoverPage || businessPage ? undefined : 'page'}>{title}</a>
           <a href="#tukar-shift" aria-current={swapPage ? 'page' : undefined}>Tukar shift</a>
+          <a href="#serah-terima" aria-current={handoverPage ? 'page' : undefined}>Serah terima</a>
           {user.role === 'ADMIN' && <a href="#usaha" aria-current={businessPage ? 'page' : undefined}>Kelola usaha</a>}
         </nav>
         <div className="account">
@@ -151,6 +154,7 @@ function App() {
       {authError && <p role="alert" className="error">{authError}</p>}
       {businessPage ? <Business onExpired={expire} /> : swapPage
         ? <Swaps key={user.id} user={user} onExpired={expire} />
+        : handoverPage ? <Handovers key={user.id} user={user} onExpired={expire} />
         : <Schedule key={user.id} user={user} title={title} onExpired={expire} />}
     </main>
   </>

@@ -26,5 +26,9 @@ Buka `http://localhost:5173`. Vite meneruskan `/api` dan `/sanctum` ke backend l
   departemen, menanggapi permintaan masuk, dan membatalkan pengajuan yang masih
   menunggu. Supervisor memutuskan permintaan yang sudah diterima rekan. Admin
   dapat membaca permintaan dan riwayatnya.
+- Di menu Serah terima, karyawan pemilik shift keluar dapat membuat, mengubah,
+  mengambil alih, dan mengirim draf. Pemilik terkini shift penerima dapat
+  mengakui laporan setelah shiftnya dimulai. Owner dan Supervisor dapat
+  membaca laporan dalam lingkup akses masing-masing.
 
 Jalankan `npm run build` untuk memeriksa tipe TypeScript dan menghasilkan `dist/`. Di lingkungan produksi, sajikan `dist/`, API, dan rute CSRF dari origin HTTPS yang sama. Konfigurasikan domain stateful Sanctum dan kuki Secure pada backend.
