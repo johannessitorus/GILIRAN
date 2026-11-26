@@ -64,12 +64,16 @@ export async function read<T>(path: string, options?: ReadOptions) {
   return (await request<{ data: T }>(`/api/v1${path}`, options)).data
 }
 
+export function readPage<T>(path: string, query: URLSearchParams, options?: ReadOptions) {
+  return request<Page<T>>(`/api/v1${path}?${query}`, options)
+}
+
 export async function list<T>(path: string, filters: Record<string, string>, options?: ReadOptions) {
   const query = new URLSearchParams({ ...filters, per_page: '100' })
   const rows: T[] = []
   for (let page = 1; ; page++) {
     query.set('page', String(page))
-    const result = await request<Page<T>>(`/api/v1${path}?${query}`, options)
+    const result = await readPage<T>(path, query, options)
     rows.push(...result.data)
     if (rows.length >= result.meta.total || result.data.length === 0) return rows
   }

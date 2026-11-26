@@ -6,6 +6,7 @@ import type { User } from './api'
 import { Schedule } from './schedule'
 import { Swaps } from './swaps'
 import { Handovers } from './handovers'
+import { AuditLog } from './audit'
 import { AccountForm, Business, isAccountPage } from './accounts'
 import './style.css'
 
@@ -27,6 +28,7 @@ function App() {
   const params = new URLSearchParams(search)
   const swapPage = page === 'tukar-shift'
   const handoverPage = page === 'serah-terima'
+  const auditPage = page === 'audit' && user !== null && user.role !== 'EMPLOYEE'
   const businessPage = page === 'usaha' && user?.role === 'ADMIN'
 
   useEffect(() => {
@@ -138,9 +140,10 @@ function App() {
       <div className="frame topbar-inner">
         <Brand />
         <nav aria-label="Navigasi utama" className="flex flex-wrap gap-2">
-          <a href="#jadwal" aria-current={swapPage || handoverPage || businessPage ? undefined : 'page'}>{title}</a>
+          <a href="#jadwal" aria-current={swapPage || handoverPage || businessPage || auditPage ? undefined : 'page'}>{title}</a>
           <a href="#tukar-shift" aria-current={swapPage ? 'page' : undefined}>Tukar shift</a>
           <a href="#serah-terima" aria-current={handoverPage ? 'page' : undefined}>Serah terima</a>
+          {user.role !== 'EMPLOYEE' && <a href="#audit" aria-current={auditPage ? 'page' : undefined}>Riwayat audit</a>}
           {user.role === 'ADMIN' && <a href="#usaha" aria-current={businessPage ? 'page' : undefined}>Kelola usaha</a>}
         </nav>
         <div className="account">
@@ -155,6 +158,7 @@ function App() {
       {businessPage ? <Business onExpired={expire} /> : swapPage
         ? <Swaps key={user.id} user={user} onExpired={expire} />
         : handoverPage ? <Handovers key={user.id} user={user} onExpired={expire} />
+        : auditPage ? <AuditLog key={user.id} zone={user.organization_timezone} onExpired={expire} />
         : <Schedule key={user.id} user={user} title={title} onExpired={expire} />}
     </main>
   </>
