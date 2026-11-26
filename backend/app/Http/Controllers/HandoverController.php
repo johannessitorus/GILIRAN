@@ -38,6 +38,12 @@ final class HandoverController extends Controller
         abort_unless(in_array($actor->role, ['ADMIN', 'SUPERVISOR'], true), 403);
         $query = DB::table('audit_logs')->when($actor->role === 'SUPERVISOR',
             fn ($q) => $q->where('department_id', $actor->department_id));
+        if ($actor->role === 'ADMIN') {
+            $query->where(fn ($q) => $q->whereIn('department_id',
+                DB::table('departments')->select('id')->where('business_id', $actor->business_id))
+                ->orWhere(fn ($unassigned) => $unassigned->whereNull('department_id')->whereIn('actor_id',
+                    DB::table('users')->select('id')->where('business_id', $actor->business_id))));
+        }
 
         return $this->page($request, $query->orderByDesc('created_at'), 'id');
     }
@@ -240,6 +246,8 @@ final class HandoverController extends Controller
             ->join('shift_assignments as t', 'r.recipient_assignment_id', '=', 't.id')->select('r.*');
         if ($actor->role !== 'ADMIN') {
             $query->where('s.department_id', $actor->department_id);
+        } else {
+            $query->whereIn('s.department_id', DB::table('departments')->select('id')->where('business_id', $actor->business_id));
         }
         if ($actor->role === 'EMPLOYEE') {
             $query->where(function ($q) use ($actor) {

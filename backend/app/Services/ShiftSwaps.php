@@ -202,6 +202,8 @@ final class ShiftSwaps
         $query = DB::table('shift_swap_requests');
         if ($actor->role !== 'ADMIN') {
             $query->where('department_id', $actor->department_id);
+        } else {
+            $query->whereIn('department_id', DB::table('departments')->select('id')->where('business_id', $actor->business_id));
         }
         if ($actor->role === 'EMPLOYEE') {
             $query->where(fn ($q) => $q->where('requester_id', $actor->id)->orWhere('target_employee_id', $actor->id));

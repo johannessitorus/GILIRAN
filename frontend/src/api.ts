@@ -6,6 +6,7 @@ export type User = {
   role: Role
   department_id: string | null
   organization_timezone: string
+  business_name?: string
 }
 export type Option = { id: string; name: string; active: boolean }
 export type AssignmentStatus = 'SCHEDULED' | 'CANCELLED' | 'COMPLETED'

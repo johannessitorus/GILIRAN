@@ -54,6 +54,7 @@ final class FoundationController extends Controller
 
         return response()->json(['data' => $this->ids(Arr::only((array) $actor, self::ACCOUNT) + [
             'organization_timezone' => $this->settings()['organization_timezone'],
+            'business_name' => DB::table('businesses')->where('id', $actor->business_id)->value('name'),
         ])]);
     }
 
@@ -75,7 +76,9 @@ final class FoundationController extends Controller
             'page' => 'integer|min:1', 'per_page' => 'integer|min:1|max:100',
         ])->validate();
         $query = DB::table('shift_types')->select('id', 'department_id', 'name', 'active');
-        if ($actor->role !== 'ADMIN') {
+        if ($actor->role === 'ADMIN') {
+            $query->whereIn('department_id', DB::table('departments')->select('id')->where('business_id', $actor->business_id));
+        } else {
             $query->where('department_id', $actor->department_id);
         }
         $page = $query->orderBy('id')->paginate($filters['per_page'] ?? 25, ['*'], 'page', $filters['page'] ?? 1);
@@ -209,13 +212,14 @@ final class FoundationController extends Controller
 
     private function saveDirectory(string $resource, object $actor, string $role, ?string $id, array $values): object
     {
-        $snapshot = $id === null ? null : DB::table($resource)->find($id);
+        $snapshot = $id === null ? null : DB::table($resource)->where('business_id', $actor->business_id)->find($id);
         $departments = $resource === 'departments' ? [$id] : [$snapshot->department_id ?? null, $values['department_id'] ?? null];
-        $locked = DB::table('departments')->whereIn('id', array_filter($departments))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $locked = DB::table('departments')->where('business_id', $actor->business_id)
+            ->whereIn('id', array_filter($departments))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
         $users = $this->lockUsers([$actor->id, $resource === 'users' ? $id : null]);
         $this->checkActor($users->get($actor->id), $actor, $role);
         $old = $resource === 'users' ? $users->get($id) : $locked->get($id);
-        abort_if($id !== null && ! $old, 404);
+        abort_if($id !== null && (! $old || $old->business_id !== $actor->business_id), 404);
         if ($resource === 'departments' && array_key_exists('active', $values) && ! $values['active'] && $old) {
             if (DB::table('users')->where('department_id', $id)->where('active', true)->exists()
                 || DB::table('shift_types')->where('department_id', $id)->where('active', true)->exists()
@@ -249,6 +253,9 @@ final class FoundationController extends Controller
             if ($old && (isset($values['password_hash']) || (array_key_exists('active', $values) && ! $values['active']))) {
                 DB::table('sessions')->where('user_id', $id)->delete();
             }
+        }
+        if ($id === null) {
+            $values['business_id'] = $actor->business_id;
         }
         $row = $this->save($resource, $id, $values);
         $safe = $resource === 'users' ? ['department_id', 'role', 'active'] : ['active'];
@@ -325,7 +332,9 @@ final class FoundationController extends Controller
         $query = DB::table($table);
 
         return match (true) {
-            $actor->role === 'ADMIN' => $query,
+            $actor->role === 'ADMIN' && $resource === 'assignments' => $query->whereIn('department_id',
+                DB::table('departments')->select('id')->where('business_id', $actor->business_id)),
+            $actor->role === 'ADMIN' => $query->where('business_id', $actor->business_id),
             $resource === 'departments' => $query->where('id', $actor->department_id),
             $resource === 'users' && $actor->role === 'EMPLOYEE' => $query->where('id', $actor->id),
             $resource === 'users' => $query->where('department_id', $actor->department_id)->where('role', 'EMPLOYEE'),

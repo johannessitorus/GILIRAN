@@ -5,9 +5,10 @@ import { ApiError, errorMessage, read, write } from './api'
 import type { User } from './api'
 import { Schedule } from './schedule'
 import { Swaps } from './swaps'
+import { AccountForm, Business, isAccountPage } from './accounts'
 import './style.css'
 
-const roles = { ADMIN: 'Admin', SUPERVISOR: 'Supervisor', EMPLOYEE: 'Karyawan' }
+const roles = { ADMIN: 'Owner', SUPERVISOR: 'Supervisor', EMPLOYEE: 'Karyawan' }
 
 function Brand() {
   return <div className="brand"><span aria-hidden="true">G</span> GILIRAN</div>
@@ -18,11 +19,16 @@ function App() {
   const [checking, setChecking] = useState(true)
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState('')
+  const [authError, setAuthError] = useState('')
   const [startupError, setStartupError] = useState('')
-  const [swapPage, setSwapPage] = useState(() => location.hash === '#tukar-shift')
+  const [route, setRoute] = useState(() => location.hash.slice(1))
+  const [page, search] = route.split('?')
+  const params = new URLSearchParams(search)
+  const swapPage = page === 'tukar-shift'
+  const businessPage = page === 'usaha' && user?.role === 'ADMIN'
 
   useEffect(() => {
-    function updatePage() { setSwapPage(location.hash === '#tukar-shift') }
+    function updatePage() { setRoute(location.hash.slice(1)) }
     window.addEventListener('hashchange', updatePage)
     return () => window.removeEventListener('hashchange', updatePage)
   }, [])
@@ -33,7 +39,8 @@ function App() {
     try {
       setUser(await read<User>('/auth/me'))
     } catch (error) {
-      if (!(error instanceof ApiError && error.status === 401)) setStartupError(errorMessage(error))
+      if (error instanceof ApiError && error.status === 401) setUser(null)
+      else setStartupError(errorMessage(error))
     } finally {
       setChecking(false)
     }
@@ -43,6 +50,7 @@ function App() {
 
   const expire = useCallback(() => {
     setUser(null)
+    setAuthError('')
     setNotice('Sesi telah berakhir. Masuk kembali untuk membuka jadwal.')
   }, [])
 
@@ -51,26 +59,46 @@ function App() {
     const fields = new FormData(event.currentTarget)
     setPending(true)
     setNotice('')
+    setAuthError('')
     try {
       const account = await write<User>('/auth/login', 'POST', { email: fields.get('email'), password: fields.get('password') })
       setUser(account ?? await read<User>('/auth/me'))
+      const invite = params.get('undangan')
+      if (invite && /^[a-f0-9]{64}$/.test(invite)) location.hash = `accept-invite?token=${invite}`
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) await restore()
-      else setNotice(errorMessage(error))
+      else setAuthError(errorMessage(error))
     } finally {
       setPending(false)
     }
   }
 
+  if (!checking && !startupError && isAccountPage(page)) {
+    const token = params.get('token') ?? ''
+    return <main className="login"><section className="login-panel">
+      <Brand />
+      <AccountForm key={route} mode={page} token={token} user={user} onComplete={(message) => {
+        location.hash = user ? 'jadwal' : 'masuk'
+        setNotice(message)
+        setAuthError('')
+        if (user && page === 'reset-password') void restore()
+      }} />
+      {user && page === 'accept-invite' && <button disabled={pending} onClick={() => void logout()}>Keluar untuk ganti akun</button>}
+      {notice && <p role="status">{notice}</p>}
+      {authError && <p role="alert" className="error">{authError}</p>}
+    </section></main>
+  }
+
   async function logout() {
     setPending(true)
     setNotice('')
+    setAuthError('')
     try {
       await write('/auth/logout', 'POST', {})
       setUser(null)
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) setUser(null)
-      else setNotice(errorMessage(error))
+      else setAuthError(errorMessage(error))
     } finally {
       setPending(false)
     }
@@ -89,9 +117,14 @@ function App() {
           <form onSubmit={login} className="grid gap-4">
             <label>Surel<input name="email" type="email" autoComplete="username" required /></label>
             <label>Kata sandi<input name="password" type="password" autoComplete="current-password" required /></label>
-            {notice && <p role="alert" className="error">{notice}</p>}
+            {notice && <p role="status">{notice}</p>}
+            {authError && <p role="alert" className="error">{authError}</p>}
             <button className="primary" disabled={pending}>{pending ? 'Memeriksa…' : 'Masuk'}</button>
           </form>
+          <div className="flex flex-wrap justify-between gap-2 text-sm text-blue-800 underline">
+            <a href="#daftar">Daftarkan usaha</a>
+            <a href="#lupa-sandi">Lupa kata sandi?</a>
+          </div>
         </>}
       </section>
     </main>
@@ -103,18 +136,20 @@ function App() {
       <div className="frame topbar-inner">
         <Brand />
         <nav aria-label="Navigasi utama" className="flex flex-wrap gap-2">
-          <a href="#jadwal" aria-current={swapPage ? undefined : 'page'}>{title}</a>
+          <a href="#jadwal" aria-current={swapPage || businessPage ? undefined : 'page'}>{title}</a>
           <a href="#tukar-shift" aria-current={swapPage ? 'page' : undefined}>Tukar shift</a>
+          {user.role === 'ADMIN' && <a href="#usaha" aria-current={businessPage ? 'page' : undefined}>Kelola usaha</a>}
         </nav>
         <div className="account">
-          <div><strong>{user.name}</strong><span>{roles[user.role]}</span></div>
+          <div><strong>{user.name}</strong><span>{[roles[user.role], user.business_name].filter(Boolean).join(' · ')}</span></div>
           <button disabled={pending} onClick={() => void logout()}>{pending ? 'Keluar…' : 'Keluar'}</button>
         </div>
       </div>
     </header>
     <main className="frame workspace">
-      {notice && <p role="alert" className="error">{notice}</p>}
-      {swapPage
+      {notice && <p role="status">{notice}</p>}
+      {authError && <p role="alert" className="error">{authError}</p>}
+      {businessPage ? <Business onExpired={expire} /> : swapPage
         ? <Swaps key={user.id} user={user} onExpired={expire} />
         : <Schedule key={user.id} user={user} title={title} onExpired={expire} />}
     </main>

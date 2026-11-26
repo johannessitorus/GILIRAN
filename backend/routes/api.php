@@ -1,9 +1,19 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\FoundationController;
 use App\Http\Controllers\HandoverController;
 use App\Http\Controllers\SwapController;
 use Illuminate\Support\Facades\Route;
+
+Route::prefix('v1/auth')->controller(AccountController::class)->group(function () {
+    Route::post('/register', 'register')->middleware('throttle:10,1,registration');
+    Route::post('/forgot-password', 'forgot')->middleware('throttle:10,1,password-reset');
+    Route::post('/invitations', 'invite')->middleware(['auth:sanctum', 'throttle:10,1,invitations']);
+    Route::post('/links/{purpose}', 'complete')
+        ->whereIn('purpose', ['verify-owner', 'accept-invite', 'reset-password'])
+        ->middleware('throttle:10,1,account-links');
+});
 
 Route::prefix('v1')->controller(FoundationController::class)->group(function () {
     Route::post('/auth/login', 'login')->middleware('throttle:10,1');

@@ -18,6 +18,10 @@ Buka `http://localhost:5173`. Vite meneruskan `/api` dan `/sanctum` ke backend l
 - Karyawan melihat shift miliknya.
 - Supervisor melihat kalender tim dan bisa menambah, mengubah, atau membatalkan penugasan yang diizinkan API.
 - Admin melihat kalender organisasi dan dapat menyaringnya berdasarkan departemen.
+- Di halaman masuk, calon Owner dapat mendaftarkan usaha dan mengaktifkannya
+  lewat surel. Di menu Kelola usaha, Owner dapat menambah cabang atau departemen
+  serta mengundang Supervisor dan Karyawan. Gunakan Lupa kata sandi untuk
+  meminta tautan reset melalui surel.
 - Di menu Tukar shift, karyawan dapat mengajukan pertukaran dengan rekan satu
   departemen, menanggapi permintaan masuk, dan membatalkan pengajuan yang masih
   menunggu. Supervisor memutuskan permintaan yang sudah diterima rekan. Admin
