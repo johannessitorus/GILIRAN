@@ -11,3 +11,11 @@ class DatabaseSeeder extends Seeder
         // Data demo lokal dibuat melalui perintah giliran:demo.
     }
 }
+
+// | Peran | Surel |
+// |---|---|
+// | Admin | admin@giliran.test |
+// | Supervisor | supervisor@giliran.test |
+// | Karyawan | employee@giliran.test |
+
+// Buat kata sandi akun demo dengan php artisan giliran:demo.
