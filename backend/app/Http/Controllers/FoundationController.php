@@ -68,6 +68,24 @@ final class FoundationController extends Controller
         return response()->noContent();
     }
 
+    public function shiftTypes(Request $request)
+    {
+        $actor = $this->actor($request);
+        $filters = Validator::make($request->query(), [
+            'page' => 'integer|min:1', 'per_page' => 'integer|min:1|max:100',
+        ])->validate();
+        $query = DB::table('shift_types')->select('id', 'department_id', 'name', 'active');
+        if ($actor->role !== 'ADMIN') {
+            $query->where('department_id', $actor->department_id);
+        }
+        $page = $query->orderBy('id')->paginate($filters['per_page'] ?? 25, ['*'], 'page', $filters['page'] ?? 1);
+
+        return response()->json([
+            'data' => $page->getCollection()->map(fn ($row) => $this->ids((array) $row))->values(),
+            'meta' => ['page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total()],
+        ]);
+    }
+
     public function index(Request $request, string $resource)
     {
         $actor = $this->actor($request);

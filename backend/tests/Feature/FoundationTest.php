@@ -94,6 +94,28 @@ final class FoundationTest extends TestCase
         $this->getJson("/api/v1/assignments/{$outsideId}")->assertNotFound();
     }
 
+    public function test_shift_type_catalog_is_paginated_and_scoped_to_the_actor(): void
+    {
+        $department = $this->department('Operasional');
+        $other = $this->department('Dukungan');
+        $type = $this->shiftType($department);
+        $otherType = $this->shiftType($other);
+        $route = '/api/v1/shift-types';
+
+        $this->getJson($route)->assertUnauthorized();
+        foreach (['SUPERVISOR', 'EMPLOYEE'] as $role) {
+            $this->app['auth']->forgetGuards();
+            $this->actingAs($this->user($role, $department), 'web')->getJson($route)
+                ->assertOk()->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.id', (string) $type)
+                ->assertJsonPath('data.0.active', true)
+                ->assertJsonPath('meta.total', 1);
+        }
+        $this->app['auth']->forgetGuards();
+        $this->actingAs($this->user('ADMIN', null), 'web')->getJson($route.'?per_page=1&page=2')
+            ->assertOk()->assertJsonPath('data.0.id', (string) $otherType)->assertJsonPath('meta.total', 2);
+    }
+
     private function department(string $name): int
     {
         return DB::table('departments')->insertGetId(['name' => $name]);

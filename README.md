@@ -33,7 +33,7 @@ GILIRAN is a web-based application designed to manage employee shift schedules, 
 - Stage 1: Requirements and MVP planning — Documented
 - Stage 2: System architecture and database design — Documented
 - Stage 3: Backend development — Scheduling, swaps, handovers, tasks, and audit implemented
-- Stage 4: Frontend development — Not started
+- Stage 4: Frontend development — Sign-in, role-based schedules, and supervisor assignment management implemented
 
 ## Documentation
 
@@ -41,6 +41,7 @@ GILIRAN is a web-based application designed to manage employee shift schedules, 
 - [System Design](docs/02_system_design.txt)
 - [API and Acceptance Criteria](docs/03_api_and_acceptance.md)
 - [Backend Setup and Tests](backend/README.md)
+- [Frontend Setup](frontend/README.md)
 
 ## License
 

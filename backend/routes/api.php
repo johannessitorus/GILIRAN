@@ -10,6 +10,7 @@ Route::prefix('v1')->controller(FoundationController::class)->group(function () 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/auth/me', 'me');
         Route::post('/auth/logout', 'logout');
+        Route::get('/shift-types', 'shiftTypes');
         foreach (['departments', 'users', 'assignments'] as $resource) {
             Route::get("/{$resource}", 'index')->defaults('resource', $resource);
             Route::get("/{$resource}/{id}", 'show')->whereNumber('id')->defaults('resource', $resource);
