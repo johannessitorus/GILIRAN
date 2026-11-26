@@ -30,11 +30,11 @@ saat menguji API sesi melalui klien HTTP.
 Pendaftaran usaha, undangan anggota, dan reset kata sandi mengirim tautan ke
 `FRONTEND_URL`. Untuk menguji dengan `MAIL_MAILER=log`, buka
 `docker compose exec api tail -n 100 /srv/giliran/storage/logs/laravel.log`
-di lingkungan lokal. Di produksi, gunakan mailer yang mengirim surel, URL
+di lingkungan lokal. Di produksi, gunakan mailer yang mengirim Email, URL
 frontend HTTPS, dan sesi database agar reset dapat mencabut sesi aktif.
 Data proyek yang sudah ada dimigrasikan ke usaha bawaan GILIRAN. Peran
 `ADMIN` ditampilkan sebagai Owner dan hanya dapat mengakses usahanya sendiri.
-Setiap alamat surel terhubung ke satu usaha.
+Setiap alamat Email terhubung ke satu usaha.
 
 Perintah `php artisan giliran:complete-assignments` menutup penugasan yang
 telah berakhir. Gunakan `php artisan giliran:expire-swaps` untuk menutup permintaan tukar yang

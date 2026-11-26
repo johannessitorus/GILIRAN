@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, errorMessage, list, read, write } from './api'
 import type { Assignment, Option, User } from './api'
+import { useFeedback } from './feedback'
+import { formatLocalTime as formatTime } from './time'
 
 const statuses = {
   PENDING_PEER: 'Menunggu rekan', PENDING_APPROVAL: 'Menunggu Supervisor',
@@ -49,13 +51,9 @@ function availableActions(row: Swap, user: User): Action[] {
   return []
 }
 
-function formatTime(value: string, zone: string) {
-  return DateTime.fromISO(value, { zone }).setLocale('id').toFormat('d LLL yyyy, HH:mm')
-}
-
-export function Swaps({ user, onExpired }: { user: User; onExpired: () => void }) {
+export function Swaps({ user, onExpired, initialId = null }: { user: User; onExpired: () => void; initialId?: string | null }) {
   const [rows, setRows] = useState<Swap[] | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(initialId)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [shifts, setShifts] = useState<TeamShift[]>([])
   const [creating, setCreating] = useState(false)
@@ -64,7 +62,7 @@ export function Swaps({ user, onExpired }: { user: User; onExpired: () => void }
   const [listError, setListError] = useState('')
   const [detailError, setDetailError] = useState('')
   const [actionError, setActionError] = useState('')
-  const [message, setMessage] = useState('')
+  const showFeedback = useFeedback()
   const zone = user.organization_timezone
 
   useEffect(() => {
@@ -118,17 +116,16 @@ export function Swaps({ user, onExpired }: { user: User; onExpired: () => void }
     }
     setCreating(false)
     setActionError('')
-    setMessage('')
   }
 
   async function decide(action: Action) {
     if (!detail || pending) return
     setPending(true)
+    showFeedback(null)
     setActionError('')
-    setMessage('')
     try {
       await write(`/swaps/${detail.id}/${action}`, 'POST', {})
-      setMessage(action === 'approve'
+      showFeedback(action === 'approve'
         ? 'Pertukaran disetujui. Jadwal terbaru tersedia di kalender.'
         : 'Status permintaan diperbarui.')
     } catch (error) {
@@ -148,16 +145,14 @@ export function Swaps({ user, onExpired }: { user: User; onExpired: () => void }
         setCreating(true)
         setSelected(null)
         setDetail(null)
-        setMessage('')
         setActionError('')
       }}>Ajukan pertukaran</button>}
     </section>
     {creating && <SwapForm user={user} onExpired={onExpired} onClose={() => setCreating(false)} onCreated={(id) => {
       select(id)
-      setMessage('Permintaan dikirim dan menunggu keputusan rekan.')
+      showFeedback('Permintaan dikirim dan menunggu keputusan rekan.')
       setRefresh((value) => value + 1)
     }} />}
-    {message && <p className="my-4 text-emerald-800" role="status">{message}</p>}
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(16rem,1fr)_2fr]">
       <section className="schedule grid gap-3 p-4 sm:p-5" aria-labelledby="swap-list">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -232,6 +227,7 @@ function SwapForm({ user, onExpired, onClose, onCreated }: {
   const [data, setData] = useState<{ shifts: TeamShift[]; types: Option[] } | null>(null)
   const [loadError, setLoadError] = useState('')
   const [submitError, setSubmitError] = useState('')
+  const showFeedback = useFeedback()
   const [pending, setPending] = useState(false)
   const [retry, setRetry] = useState(0)
 
@@ -261,6 +257,7 @@ function SwapForm({ user, onExpired, onClose, onCreated }: {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!source || !target || pending) return
+    showFeedback(null)
     const reason = String(new FormData(event.currentTarget).get('reason') ?? '').trim()
     if (!reason) {
       setSubmitError('Isi alasan pertukaran.')

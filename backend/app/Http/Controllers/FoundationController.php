@@ -305,8 +305,16 @@ final class FoundationController extends Controller
             }
             $start = CarbonImmutable::parse($next['starts_at']);
             $end = CarbonImmutable::parse($next['ends_at']);
-            if ($start <= $now || $end <= $start || $start->diffInMinutes($end) > $settings['max_shift_minutes']) {
-                throw ValidationException::withMessages(['starts_at' => 'Gunakan interval mendatang dengan durasi yang diizinkan.']);
+            if ($start <= $now) {
+                throw ValidationException::withMessages(['starts_at' => 'Waktu mulai sudah lewat atau sama dengan waktu sekarang. Pilih waktu mulai setelah waktu sekarang.']);
+            }
+            if ($end <= $start) {
+                throw ValidationException::withMessages(['ends_at' => 'Waktu selesai harus setelah waktu mulai. Untuk shift lewat tengah malam, pilih tanggal selesai berikutnya.']);
+            }
+            $maxMinutes = (int) $settings['max_shift_minutes'];
+            if ($start->diffInMinutes($end) > $maxMinutes) {
+                $limit = $maxMinutes % 60 === 0 ? intdiv($maxMinutes, 60).' jam' : $maxMinutes.' menit';
+                throw ValidationException::withMessages(['ends_at' => "Durasi shift melebihi batas {$limit}."]);
             }
             ScheduleRules::check($owner->id, $type, $start, $end, $id === null ? [] : [$id], $settings['minimum_rest_minutes']);
             $values = ['department_id' => $department->id, 'employee_id' => $owner->id, 'shift_type_id' => $type->id,

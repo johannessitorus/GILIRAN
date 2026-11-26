@@ -19,9 +19,9 @@ Buka `http://localhost:5173`. Vite meneruskan `/api` dan `/sanctum` ke backend l
 - Supervisor melihat kalender tim dan bisa menambah, mengubah, atau membatalkan penugasan yang diizinkan API.
 - Admin melihat kalender organisasi dan dapat menyaringnya berdasarkan departemen.
 - Di halaman masuk, calon Owner dapat mendaftarkan usaha dan mengaktifkannya
-  lewat surel. Di menu Kelola usaha, Owner dapat menambah cabang atau departemen
+  lewat Email. Di menu Kelola usaha, Owner dapat menambah cabang atau departemen
   serta mengundang Supervisor dan Karyawan. Gunakan Lupa kata sandi untuk
-  meminta tautan reset melalui surel.
+  meminta tautan reset melalui Email.
 - Di menu Tukar shift, karyawan dapat mengajukan pertukaran dengan rekan satu
   departemen, menanggapi permintaan masuk, dan membatalkan pengajuan yang masih
   menunggu. Supervisor memutuskan permintaan yang sudah diterima rekan. Admin
@@ -35,5 +35,8 @@ Buka `http://localhost:5173`. Vite meneruskan `/api` dan `/sanctum` ke backend l
   berwenang dapat mengubah status tugas. Mengakui laporan tidak mengubah status tugas.
 - Di Riwayat audit, Owner dan Supervisor dapat melihat tindakan, hasil, pelaku,
   serta rincian perubahan dalam lingkup usaha atau departemennya.
+- Menu Notifikasi menampilkan permintaan tukar shift, keputusan, serta
+  pengiriman dan pengakuan serah terima untuk pengguna yang terkait. Dari
+  menu ini, pengguna dapat membuka rincian dan menandai notifikasi sebagai dibaca.
 
 Jalankan `npm run build` untuk memeriksa tipe TypeScript dan menghasilkan `dist/`. Di lingkungan produksi, sajikan `dist/`, API, dan rute CSRF dari origin HTTPS yang sama. Konfigurasikan domain stateful Sanctum dan kuki Secure pada backend.

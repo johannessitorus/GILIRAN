@@ -23,7 +23,7 @@ export type Assignment = {
 }
 
 const messages: Record<string, string> = {
-  INVALID_CREDENTIALS: 'Surel atau kata sandi tidak sesuai.',
+  INVALID_CREDENTIALS: 'Email atau kata sandi tidak sesuai.',
   CSRF_TOKEN_MISMATCH: 'Token sesi kedaluwarsa. Coba kembali.',
   RATE_LIMITED: 'Terlalu banyak percobaan. Tunggu sebentar sebelum mencoba lagi.',
   VERSION_CONFLICT: 'Penugasan sudah diperbarui. Muat ulang jadwal sebelum mengubahnya.',

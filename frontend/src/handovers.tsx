@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, errorMessage, list, read, write } from './api'
 import type { Assignment, User } from './api'
+import { useFeedback } from './feedback'
+import { formatLocalTime as formatDate } from './time'
 
 type Shift = Pick<Assignment, 'id' | 'starts_at' | 'ends_at' | 'status'> & {
   employee_id?: string
@@ -51,10 +53,6 @@ function describeError(error: unknown) {
   return error instanceof ApiError ? handoverErrors[error.code] ?? errorMessage(error) : errorMessage(error)
 }
 
-function formatDate(value: string, zone: string) {
-  return DateTime.fromISO(value, { zone }).setLocale('id').toFormat('d LLL yyyy, HH:mm')
-}
-
 function shiftLabel(shift: Shift | null, id: string, user: User) {
   if (!shift) return 'Penugasan #' + id
   const name = shift.employee_id === user.id ? user.name : shift.display_name
@@ -71,17 +69,16 @@ async function readShift(id: string, signal: AbortSignal) {
   }
 }
 
-export function Handovers({ user, onExpired }: { user: User; onExpired: () => void }) {
+export function Handovers({ user, onExpired, initialId = '' }: { user: User; onExpired: () => void; initialId?: string }) {
   const [rows, setRows] = useState<Report[] | null>(null)
-  const [selected, setSelected] = useState('')
+  const [selected, setSelected] = useState(initialId)
   const [creating, setCreating] = useState(false)
   const [detail, setDetail] = useState<DetailData | null>(null)
   const [listError, setListError] = useState('')
   const [detailError, setDetailError] = useState('')
   const [actionError, setActionError] = useState('')
   const [taskError, setTaskError] = useState('')
-  const [taskNotice, setTaskNotice] = useState('')
-  const [notice, setNotice] = useState('')
+  const showFeedback = useFeedback()
   const [pending, setPending] = useState(false)
   const [refresh, setRefresh] = useState(0)
 
@@ -122,7 +119,6 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
     setDetailError('')
     setActionError('')
     setTaskError('')
-    setTaskNotice('')
     setRows(null)
     setDetail(null)
     setRefresh((value) => value + 1)
@@ -135,22 +131,20 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
     setDetail(null)
     setDetailError('')
     setActionError('')
-    setNotice('')
     setTaskError('')
-    setTaskNotice('')
   }
 
   async function save(path: string, method: 'POST' | 'PATCH', payload: object, message: string) {
     setPending(true)
+    showFeedback(null)
     setActionError('')
-    setNotice('')
     try {
       const result = await write<Detail>(path, method, payload)
       if (!result) throw new Error('Respons laporan kosong')
       reload()
       setSelected(result.id)
       setCreating(false)
-      setNotice(message)
+      showFeedback(message)
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) onExpired()
       else setActionError(describeError(error))
@@ -172,8 +166,8 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
   async function saveTask(method: TaskMethod, payload: object, task?: Task) {
     if (pending || !report) return false
     setPending(true)
+    showFeedback(null)
     setTaskError('')
-    setTaskNotice('')
     try {
       const result = await write<Task>(path + '/tasks' + (task ? '/' + task.id : ''), method,
         task ? { ...payload, version: task.version } : payload)
@@ -187,7 +181,7 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
         else if (result) updated = [...tasks, result]
         return { ...current, report: { ...current.report, tasks: updated } }
       })
-      setTaskNotice(method === 'POST' ? 'Tugas ditambahkan.' : method === 'DELETE'
+      showFeedback(method === 'POST' ? 'Tugas ditambahkan.' : method === 'DELETE'
         ? 'Tugas dihapus.' : 'Tugas diperbarui.')
       return true
     } catch (error) {
@@ -208,12 +202,10 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
         <button disabled={pending || creating} onClick={reload}>Muat ulang</button>
         {isEmployee && !creating && <button className="primary" disabled={pending} onClick={() => {
           open('')
-          setNotice('')
           setCreating(true)
         }}>Buat draf</button>}
       </div>
     </header>
-    {notice && <p className="mb-4 text-emerald-800" role="status">{notice}</p>}
     <div className="grid items-start gap-4 md:grid-cols-[minmax(14rem,1fr)_minmax(0,2fr)]">
       <section className="schedule grid gap-3 p-5" aria-label="Daftar laporan">
         <h2 className="font-bold">Laporan</h2>
@@ -256,7 +248,6 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
           <section className="grid gap-3" aria-labelledby="handover-tasks">
             <h3 id="handover-tasks" className="font-semibold">Tugas tindak lanjut</h3>
             {taskError && <p className="error" role="alert">{taskError}</p>}
-            {taskNotice && <p className="text-emerald-800" role="status">{taskNotice}</p>}
             {report.tasks.length === 0 ? <p className="muted">Belum ada tugas tindak lanjut.</p> :
               <ul className="grid gap-2">{report.tasks.map((task) => <li key={task.id} className="grid gap-2 rounded-lg bg-slate-50 p-3">
                 <p className="break-words"><strong>{task.title}</strong> · {taskStatuses[task.status]}</p>

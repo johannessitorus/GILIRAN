@@ -21,8 +21,7 @@ final class AccountController extends Controller
         ]);
         $email = strtolower($data['email']);
         if (! DB::table('users')->where('email', $email)->exists()) {
-            $this->send('verify-owner', $email, ['name' => $data['name'], 'business_name' => $data['business_name']],
-                'Verifikasi pendaftaran usaha GILIRAN', 24 * 60);
+            $this->send('verify-owner', $email, ['name' => $data['name'], 'business_name' => $data['business_name']]);
         }
 
         return response()->noContent();
@@ -45,7 +44,7 @@ final class AccountController extends Controller
         $this->send('accept-invite', $email, [
             'business_id' => $owner->business_id, 'department_id' => $department->id,
             'role' => $data['role'],
-        ], 'Undangan bergabung di GILIRAN', 72 * 60, 'Anda diundang bergabung dengan '.$business->name.'.');
+        ], $business->name);
 
         return response()->noContent();
     }
@@ -56,7 +55,7 @@ final class AccountController extends Controller
         $email = strtolower($data['email']);
         $account = DB::table('users')->where('email', $email)->where('active', true)->first();
         if ($account) {
-            $this->send('reset-password', $email, ['user_id' => $account->id], 'Atur ulang kata sandi GILIRAN', 60);
+            $this->send('reset-password', $email, ['user_id' => $account->id]);
         }
 
         return response()->noContent();
@@ -155,19 +154,47 @@ final class AccountController extends Controller
         return Hash::make($data['password']);
     }
 
-    private function send(string $purpose, string $email, array $payload, string $subject, int $minutes, string $context = ''): void
+    private function send(string $purpose, string $email, array $payload, ?string $businessName = null): void
     {
+        [$subject, $context, $action, $hours] = match ($purpose) {
+            'verify-owner' => [
+                'Aktifkan akun Owner GILIRAN',
+                'Kami menerima pendaftaran usaha '.$payload['business_name'].' di GILIRAN.',
+                'Buka tautan ini untuk membuat kata sandi dan mengaktifkan akun Owner:',
+                24,
+            ],
+            'accept-invite' => [
+                'Terima undangan bergabung di GILIRAN',
+                'Anda diundang bergabung dengan '.$businessName.'.',
+                'Buka tautan ini untuk menerima undangan:',
+                72,
+            ],
+            'reset-password' => [
+                'Atur ulang kata sandi GILIRAN',
+                'Kami menerima permintaan untuk mengatur ulang kata sandi akun Anda.',
+                'Buka tautan ini untuk menetapkan kata sandi baru:',
+                1,
+            ],
+        };
         $token = bin2hex(random_bytes(32));
         $link = rtrim(config('app.frontend_url'), '/').'/#'.$purpose.'?token='.$token;
-        DB::transaction(function () use ($purpose, $email, $payload, $token, $minutes) {
+        DB::transaction(function () use ($purpose, $email, $payload, $token, $hours) {
             DB::selectOne('SELECT pg_advisory_xact_lock(hashtextextended(?, 0))', [$email]);
             DB::table('account_links')->where('email', $email)->where('expires_at', '<=', now())->delete();
             DB::table('account_links')->insert([
                 'token_hash' => hash('sha256', $token), 'purpose' => $purpose, 'email' => $email,
-                'payload' => json_encode($payload, JSON_THROW_ON_ERROR), 'expires_at' => now()->addMinutes($minutes),
+                'payload' => json_encode($payload, JSON_THROW_ON_ERROR), 'expires_at' => now()->addHours($hours),
             ]);
         });
-        Mail::raw(trim($context."\n\nBuka tautan berikut untuk melanjutkan.\n\n".$link),
+        $body = implode("\n\n", [
+            'Halo,',
+            $context,
+            $action."\n".$link,
+            "Tautan ini berlaku {$hours} jam dan hanya bisa dipakai sekali.",
+            'Jika Anda tidak mengharapkan email ini, abaikan pesan ini.',
+            'GILIRAN',
+        ]);
+        Mail::raw($body,
             fn ($message) => $message->to($email)->subject($subject));
     }
 }

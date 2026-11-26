@@ -3,10 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, errorMessage, list, write } from './api'
 import type { Assignment, Option, User } from './api'
+import { useFeedback } from './feedback'
+import { formatLocalTime, zoneLabel } from './time'
 
 const statuses = { SCHEDULED: 'Terjadwal', COMPLETED: 'Selesai', CANCELLED: 'Dibatalkan' }
 type Catalog = { employees: Option[]; departments: Option[]; types: Option[] }
 type Editor = { action: 'create' | 'edit' | 'cancel'; row?: Assignment }
+const localDateTimeFormat = "yyyy-MM-dd'T'HH:mm"
 
 export function Schedule({ user, title, onExpired }: { user: User; title: string; onExpired: () => void }) {
   const zone = user.organization_timezone
@@ -21,7 +24,7 @@ export function Schedule({ user, title, onExpired }: { user: User; title: string
   const [refresh, setRefresh] = useState(0)
   const [error, setError] = useState('')
   const [editor, setEditor] = useState<Editor | null>(null)
-  const [message, setMessage] = useState('')
+  const showFeedback = useFeedback()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -65,19 +68,14 @@ export function Schedule({ user, title, onExpired }: { user: User; title: string
 
   function reloaded(message: string) {
     setEditor(null)
-    setMessage(message)
+    if (message) showFeedback(message)
     setRefresh((value) => value + 1)
-  }
-
-  function formatTime(value: string) {
-    return DateTime.fromISO(value, { zone }).setLocale('id').toFormat('d LLL, HH:mm')
   }
 
   return <>
     <section className="page-heading">
-      <div><h1>{title}</h1><p className="muted">Kalender mingguan · {zone}</p></div>
+      <div><h1>{title}</h1><p className="muted">Kalender mingguan · {zoneLabel(zone)}</p></div>
       {supervisor && <button className="primary" disabled={!catalog} onClick={() => {
-        setMessage('')
         setEditor({ action: 'create' })
       }}>+ Tambah penugasan</button>}
     </section>
@@ -107,7 +105,6 @@ export function Schedule({ user, title, onExpired }: { user: User; title: string
           <button onClick={() => setRefresh((value) => value + 1)}>Muat ulang</button>
         </div>
       </div>
-      {message && <p className="success" role="status">{message}</p>}
       {error ? <p role="alert" className="error schedule-state">{error}</p> : !rows
         ? <p role="status" className="schedule-state muted">Memuat jadwal…</p>
         : days.map((day) => {
@@ -123,15 +120,13 @@ export function Schedule({ user, title, onExpired }: { user: User; title: string
                   <strong>{types.get(row.shift_type_id) ?? `Tipe shift #${row.shift_type_id}`}</strong>
                   {user.role !== 'EMPLOYEE' && <span>{employees.get(row.employee_id) ?? `Karyawan #${row.employee_id}`}</span>}
                 </div>
-                <div className="shift-time">{formatTime(row.starts_at)} – {formatTime(row.ends_at)}</div>
+                <div className="shift-time">{formatLocalTime(row.starts_at, zone, 'd LLL, HH.mm')} – {formatLocalTime(row.ends_at, zone, 'd LLL, HH.mm')}</div>
                 <span className={`status ${row.status.toLowerCase()}`}>{statuses[row.status]}</span>
                 {supervisor && row.available_actions?.length > 0 && <div className="actions">
                   {row.available_actions.includes('edit') && <button onClick={() => {
-                    setMessage('')
                     setEditor({ action: 'edit', row })
                   }}>Ubah</button>}
                   {row.available_actions.includes('cancel') && <button onClick={() => {
-                    setMessage('')
                     setEditor({ action: 'cancel', row })
                   }}>Batalkan</button>}
                 </div>}
@@ -156,38 +151,48 @@ function AssignmentDialog({ editor, zone, catalog, onClose, onExpired, onReload 
   const dialog = useRef<HTMLDialogElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const showFeedback = useFeedback()
   const [stale, setStale] = useState(false)
   const { row, action } = editor
   const title = { create: 'Tambah penugasan', edit: 'Ubah penugasan', cancel: 'Batalkan penugasan' }[action]
-  const format = "yyyy-MM-dd'T'HH:mm"
-  const starts = row ? DateTime.fromISO(row.starts_at, { zone }).toFormat(format) : ''
-  const ends = row ? DateTime.fromISO(row.ends_at, { zone }).toFormat(format) : ''
+  const starts = row ? DateTime.fromISO(row.starts_at, { zone }) : null
+  const ends = row ? DateTime.fromISO(row.ends_at, { zone }) : null
 
   useEffect(() => { dialog.current?.showModal() }, [])
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    showFeedback(null)
     const form = new FormData(event.currentTarget)
     const employee = String(form.get('employee_id') ?? '')
     const type = String(form.get('shift_type_id') ?? '')
-    const start = String(form.get('starts_at') ?? '')
-    const end = String(form.get('ends_at') ?? '')
     const changes: Record<string, string | number> = {}
     setError('')
 
     if (action !== 'cancel') {
       if (employee !== row?.employee_id) changes.employee_id = employee
       if (type !== row?.shift_type_id) changes.shift_type_id = type
-      for (const [field, value, original] of [
-        ['starts_at', start, starts], ['ends_at', end, ends],
+      for (const { field, prefix, label, original } of [
+        { field: 'starts_at', prefix: 'start', label: 'mulai', original: starts },
+        { field: 'ends_at', prefix: 'end', label: 'selesai', original: ends },
       ]) {
-        if (value === original) continue
-        const time = DateTime.fromISO(value, { zone })
-        if (!time.isValid || time.toFormat(format) !== value || time.getPossibleOffsets().length > 1) {
-          setError('Pilih waktu yang valid dan tidak ambigu dalam zona waktu organisasi.')
+        const date = String(form.get(prefix + '_date') ?? '')
+        const clock = String(form.get(prefix + '_time') ?? '').trim().replace(/[.,]/, ':')
+        const endOfDay = prefix === 'end' && clock === '24:00'
+        if (!endOfDay && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(clock)) {
+          setError(`Isi jam ${label} dengan format 24 jam, misalnya 08.30.`)
           return
         }
-        changes[field] = time.toUTC().toISO()!
+        const local = date + 'T' + (endOfDay ? '00:00' : clock)
+        const time = DateTime.fromISO(local, { zone })
+        if (!time.isValid || time.toFormat(localDateTimeFormat) !== local || time.getPossibleOffsets().length > 1) {
+          setError(`Pilih tanggal dan jam ${label} yang valid.`)
+          return
+        }
+        const instant = endOfDay ? time.plus({ days: 1 }) : time
+        if (instant.toFormat(localDateTimeFormat) !== original?.toFormat(localDateTimeFormat)) {
+          changes[field] = instant.toUTC().toISO()!
+        }
       }
       if (Object.keys(changes).length === 0) {
         setError('Ubah setidaknya satu kolom sebelum menyimpan.')
@@ -234,9 +239,17 @@ function AssignmentDialog({ editor, zone, catalog, onClose, onExpired, onReload 
             <option value="" disabled>Pilih tipe shift</option>{choices(catalog.types, row?.shift_type_id)}
           </select>
         </label>
-        <p className="muted">Zona waktu · {zone}</p>
-        <label>Mulai<input name="starts_at" type="datetime-local" defaultValue={starts} required /></label>
-        <label>Selesai<input name="ends_at" type="datetime-local" defaultValue={ends} required /></label>
+        <p id="assignment-time-help" className="muted text-sm">
+          {zoneLabel(zone)}. Gunakan format 24 jam, misalnya 08.30. Jam selesai 24.00 berarti tengah malam pada akhir tanggal yang dipilih.
+        </p>
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <label>Tanggal mulai<input name="start_date" type="date" defaultValue={starts?.toISODate() ?? ''} required /></label>
+          <label>Jam mulai<input name="start_time" type="text" inputMode="decimal" placeholder="08.00"
+            aria-describedby="assignment-time-help" maxLength={5} defaultValue={starts?.toFormat('HH.mm')} required /></label>
+          <label>Tanggal selesai<input name="end_date" type="date" defaultValue={ends?.toISODate() ?? ''} required /></label>
+          <label>Jam selesai<input name="end_time" type="text" inputMode="decimal" placeholder="16.00"
+            aria-describedby="assignment-time-help" maxLength={5} defaultValue={ends?.toFormat('HH.mm')} required /></label>
+        </div>
       </>}
       {error && <p className="error" role="alert">{error}</p>}
       <div className="dialog-actions">

@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\FoundationController;
 use App\Http\Controllers\HandoverController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SwapController;
 use Illuminate\Support\Facades\Route;
 
@@ -41,6 +42,11 @@ Route::prefix('v1')->middleware('auth:sanctum')->controller(HandoverController::
         ->whereIn('action', ['adopt', 'submit', 'acknowledge']);
     Route::post('/handovers/{id}/tasks', 'task')->whereNumber('id');
     Route::match(['PATCH', 'DELETE'], '/handovers/{id}/tasks/{taskId}', 'task')->whereNumber(['id', 'taskId']);
+});
+
+Route::prefix('v1/notifications')->middleware('auth:sanctum')->controller(NotificationController::class)->group(function () {
+    Route::get('/', 'index');
+    Route::post('/{id}/read', 'read')->whereNumber('id');
 });
 
 Route::prefix('v1/swaps')->middleware('auth:sanctum')->controller(SwapController::class)->group(function () {

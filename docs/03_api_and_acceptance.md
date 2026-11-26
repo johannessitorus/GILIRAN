@@ -6,13 +6,13 @@ Dokumen pendamping untuk [desain sistem](02_system_design.txt) dan [kebutuhan MV
 
 - Gunakan HTTPS dengan asal yang sama, isi permintaan JSON, dan `Accept: application/json`. Sebelum operasi yang mengubah data dengan autentikasi kuki, ambil kuki CSRF melalui `GET /sanctum/csrf-cookie` (204) dan kirim nilainya melalui `X-XSRF-TOKEN`. Kuki sesi memakai Secure, HttpOnly, dan SameSite=Lax. Ganti ID sesi saat masuk dan batalkan sesi saat keluar. Periksa status aktif, peran, dan lingkup pada setiap permintaan terautentikasi. Cabut sesi yang ada saat akun dinonaktifkan atau kata sandi diatur ulang.
 - Satu sumber daya dikembalikan sebagai `{"data": {...}}`. Daftar dikembalikan sebagai `{"data": [...], "meta": {"page": 1, "per_page": 25, "total": 0}}`. Gunakan page >= 1 dan per_page 1–100 dengan nilai bawaan 25. Terapkan lingkup visibilitas sebelum menyaring dan menghitung hasil. Departemen dan pengguna diurutkan menurut ID. Jadwal diurutkan menurut starts_at lalu ID.
-- Kembalikan ID sebagai teks berisi angka desimal. Kembalikan waktu RFC 3339 dalam UTC dan terima waktu RFC 3339 dengan selisih zona waktu eksplisit. Buang spasi tepi surel dan ubah menjadi huruf kecil. Tolak atribut tulis tidak dikenal, tipe data yang salah, serta PATCH kosong. Terima hanya atribut yang tercantum di bawah.
-- Galat menggunakan format `{"error":{"code":"VALIDATION_FAILED","message":"Periksa data yang dikirim.","details":{"fields":{"email":["Masukkan alamat surel yang valid."]}}}}`. Objek details bersifat opsional. Jika keadaan sudah berubah, kembalikan versi atau status terkini hanya jika pengguna berhak membacanya. Galat dari kerangka kerja mengikuti format yang sama. Jangan sertakan jejak tumpukan atau data rahasia.
+- Kembalikan ID sebagai teks berisi angka desimal. Kembalikan waktu RFC 3339 dalam UTC dan terima waktu RFC 3339 dengan selisih zona waktu eksplisit. Buang spasi tepi Email dan ubah menjadi huruf kecil. Tolak atribut tulis tidak dikenal, tipe data yang salah, serta PATCH kosong. Terima hanya atribut yang tercantum di bawah.
+- Galat menggunakan format `{"error":{"code":"VALIDATION_FAILED","message":"Periksa data yang dikirim.","details":{"fields":{"email":["Masukkan alamat Email yang valid."]}}}}`. Objek details bersifat opsional. Jika keadaan sudah berubah, kembalikan versi atau status terkini hanya jika pengguna berhak membacanya. Galat dari kerangka kerja mengikuti format yang sama. Jangan sertakan jejak tumpukan atau data rahasia.
 
 | HTTP | Kode dan arti |
 | --- | --- |
 | 400 | `MALFORMED_JSON` untuk sintaks JSON yang salah |
-| 401 | `UNAUTHENTICATED` atau `INVALID_CREDENTIALS` yang bersifat umum untuk kata sandi salah, surel tidak terdaftar, atau akun nonaktif |
+| 401 | `UNAUTHENTICATED` atau `INVALID_CREDENTIALS` yang bersifat umum untuk kata sandi salah, Email tidak terdaftar, atau akun nonaktif |
 | 403 | `FORBIDDEN` untuk tindakan atau daftar yang dibatasi, termasuk tindakan terlarang pada sumber daya yang dapat dilihat |
 | 404 | `NOT_FOUND` untuk ID yang tidak ada atau di luar lingkup, termasuk ID referensi |
 | 409 | `DUPLICATE_EMAIL`, `DUPLICATE_DEPARTMENT_NAME`, `VERSION_CONFLICT`, `INVALID_TRANSITION`, `ACCOUNT_HAS_DUTIES`, `DEPARTMENT_IN_USE`, `ASSIGNMENT_OVERLAP`, `MINIMUM_REST_VIOLATION`, `QUALIFICATION_REQUIRED`, `ASSIGNMENT_RESERVED`, `ASSIGNMENT_CHANGED`, `SWAP_EXPIRED`, `HANDOVER_LINKED`, `NO_RECIPIENT` |
@@ -28,7 +28,7 @@ Untuk rute terlindungi, autentikasi pengguna, tentukan visibilitas, periksa izin
 
 | Metode dan rute | Permintaan dan otorisasi | Respons berhasil | Galat khusus |
 | --- | --- | --- | --- |
-| POST /auth/login | Pengunjung dengan CSRF. `email` dan `password` wajib berupa teks yang tidak kosong. Surel valid maksimal 255 karakter. Kata sandi maksimal 72 bita UTF-8. Batasi laju berdasarkan identitas yang dinormalisasi dan IP. | 200 dengan data pengguna saat ini dan kuki sesi | 401 `INVALID_CREDENTIALS`, 409 `INVALID_TRANSITION` jika sudah masuk, 419, 422, 429 |
+| POST /auth/login | Pengunjung dengan CSRF. `email` dan `password` wajib berupa teks yang tidak kosong. Email valid maksimal 255 karakter. Kata sandi maksimal 72 bita UTF-8. Batasi laju berdasarkan identitas yang dinormalisasi dan IP. | 200 dengan data pengguna saat ini dan kuki sesi | 401 `INVALID_CREDENTIALS`, 409 `INVALID_TRANSITION` jika sudah masuk, 419, 422, 429 |
 | GET /auth/me | Pengguna aktif yang terautentikasi | 200 dengan id, name, email, role, department_id (boleh null) dan organization_timezone miliknya | 401 |
 | POST /auth/logout | Pengguna aktif terautentikasi dengan CSRF dan isi permintaan kosong | 204, batalkan sesi dan buat ulang token CSRF | 401, 419 |
 
@@ -44,8 +44,8 @@ Gunakan hash kata sandi yang didukung Laravel. Admin menetapkan kata sandi awal 
 | PATCH /departments/{id} | Admin. Kirim `name`, `active`, atau keduanya. Terapkan syarat penonaktifan di §3 desain. | 200 departemen | 403, 404, 409 duplikat atau masih digunakan, 422 |
 | GET /users | Admin melihat daftar akun. Supervisor melihat daftar Karyawan di departemennya. Karyawan memakai /auth/me. Penyaring opsional `department_id`, `role`, `active`, dan paginasi dalam lingkup akses. | 200 daftar akun atau staf | 403, 422 |
 | GET /users/{id} | Admin melihat semua. Supervisor melihat data terbatas karyawan satu departemen. Karyawan melihat dirinya sendiri. | 200 data akun atau staf | 404 |
-| POST /users | Admin. Wajib `name`, `email`, `password`, dan `role`. `department_id` wajib sesuai peran. `active` opsional, bawaan true. | 201 akun dengan header Location | 403, 404 referensi, 409 surel duplikat, 422 |
-| PATCH /users/{id} | Admin. Atribut yang sama dapat dikirim secara opsional. Validasi gabungan data lama dan baru. Kata sandi menggantikan hash sebelumnya. Periksa kewajiban yang masih berjalan dan cabut sesi yang terdampak. | 200 akun | 403, 404, 409 surel duplikat atau kewajiban tertunda, 422 |
+| POST /users | Admin. Wajib `name`, `email`, `password`, dan `role`. `department_id` wajib sesuai peran. `active` opsional, bawaan true. | 201 akun dengan header Location | 403, 404 referensi, 409 Email duplikat, 422 |
+| PATCH /users/{id} | Admin. Atribut yang sama dapat dikirim secara opsional. Validasi gabungan data lama dan baru. Kata sandi menggantikan hash sebelumnya. Periksa kewajiban yang masih berjalan dan cabut sesi yang terdampak. | 200 akun | 403, 404, 409 Email duplikat atau kewajiban tertunda, 422 |
 
 Data departemen memuat id, name, active. Data akun memuat id, name, email, role, department_id, active. Daftar staf supervisor memuat id, name, active. Panjang nama pengguna 1–160 karakter setelah spasi tepi dibuang. Peran yang valid adalah ADMIN, SUPERVISOR, dan EMPLOYEE. Departemen Admin dapat bernilai null. Peran lain wajib memiliki departemen yang valid dan, jika akunnya aktif, departemennya juga harus aktif. Gunakan PATCH untuk penonaktifan. Tidak tersedia rute penghapusan fisik. Catat perubahan administratif dalam audit tanpa menyimpan kredensial.
 
@@ -129,7 +129,7 @@ Jalankan pengujian API dan integrasi dengan PHPUnit dan PostgreSQL. Siapkan data
 
 | SRS | Skenario dan hasil yang diharapkan |
 | --- | --- |
-| AC-01 | Admin membuat Karyawan dengan peran dan departemen valid (201). Keanggotaan tidak ada atau tidak valid memberi 422 atau 404 sesuai kasus, surel duplikat 409, dan upaya tulis Supervisor 403. Akun aktif dengan kredensial valid dapat masuk. Kredensial salah atau akun nonaktif memberi 401. Keluar membatalkan sesi. |
+| AC-01 | Admin membuat Karyawan dengan peran dan departemen valid (201). Keanggotaan tidak ada atau tidak valid memberi 422 atau 404 sesuai kasus, Email duplikat 409, dan upaya tulis Supervisor 403. Akun aktif dengan kredensial valid dapat masuk. Kredensial salah atau akun nonaktif memberi 401. Keluar membatalkan sesi. |
 | AC-02 | Supervisor menerbitkan dua penugasan valid dalam lingkupnya (masing-masing 201). Uji tumpang tindih lewat tengah malam (409), interval yang bersentuhan saat minimum istirahat nol (201), istirahat terhadap shift aktif dan selesai, Karyawan nonaktif atau tanpa kualifikasi, referensi lintas departemen, dan peran yang salah. |
 | AC-03 | Secara bawaan, Karyawan hanya melihat penugasannya. Tampilan tim mengembalikan data terbatas sesuai lingkup dan tidak membocorkan atribut pribadi. Detail lintas departemen memberi 404 dan permintaan anonim memberi 401. |
 | AC-04 | Ajukan pertukaran dua arah untuk shift mendatang yang memenuhi syarat. Periksa PENDING_PEER, dua reservasi, dan tenggat. Uji pemilik yang salah, shift sudah mulai, pelanggaran tenggat pengajuan, pasangan lintas departemen, dan kualifikasi yang kurang. Jalankan dua pengajuan serentak dengan penugasan yang sama di sisi asal dan tujuan. Pastikan hanya satu tersimpan dan penugasan dapat digunakan kembali setelah kedaluwarsa. |

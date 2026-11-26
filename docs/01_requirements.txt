@@ -137,7 +137,7 @@ BR-12 Catat keputusan pertukaran, pergantian pemilik penugasan, dan perubahan st
 
 10.2 DI LUAR CAKUPAN (v1.1+)
 - Optimasi jadwal otomatis, pengambilan shift kosong, absensi atau GPS, penggajian, dan pengelolaan cuti.
-- Notifikasi WhatsApp, surel, dan notifikasi langsung.
+- Notifikasi WhatsApp, Email, dan notifikasi langsung.
 - Analitik lanjutan, perkiraan kebutuhan tenaga kerja, rekomendasi AI, lampiran, dan penagihan untuk beberapa organisasi.
 
 11. USULAN TEKNOLOGI

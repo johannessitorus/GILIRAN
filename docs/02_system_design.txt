@@ -199,7 +199,7 @@ Baca akun pengguna                      Organisasi   Daftar staf   Akun sendiri
 
 Hanya sistem yang menandai permintaan kedaluwarsa dan menyelesaikan penugasan.
 Kalender tim untuk karyawan memuat ID penugasan, tipe, waktu, status, dan nama
-tampilan untuk membantu memilih penugasan yang dapat ditukar. Surel,
+tampilan untuk membantu memilih penugasan yang dapat ditukar. Email,
 kualifikasi, dan detail pribadi tidak ditampilkan. Daftar staf supervisor
 dibatasi pada departemennya dan hanya memuat ID, nama tampilan, serta status
 aktif. Karyawan melihat riwayat keputusan sendiri melalui sumber daya terkait.
@@ -316,7 +316,7 @@ Usulan nilai demo yang masih berupa asumsi:
 - request_notice_minutes = 1440, bilangan bulat 0..10080.
 - swap_expiration_hours = 48, bilangan bulat 1..168.
 - max_shift_minutes = 720, bilangan bulat 1..1440 menit aktual.
-- organization_timezone = Asia/Bangkok, pengenal zona waktu IANA yang valid.
+- organization_timezone = Asia/Jakarta (WIB, Waktu Indonesia Barat).
 Perubahan kebijakan berlaku untuk validasi berikutnya. Periksa kembali
 istirahat, kualifikasi, dan durasi shift saat persetujuan. Tenggat yang sudah
 disimpan tetap berlaku. Perubahan tenggat pengajuan hanya berlaku untuk

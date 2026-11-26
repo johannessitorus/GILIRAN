@@ -265,6 +265,12 @@ final class ShiftSwaps
         $this->audit($actor, $swap->department_id, 'swaps', $swap->id, $event, $time, [
             'from_status' => $from, 'to_status' => $swap->status, 'reason_code' => $reason,
         ]);
+        $recipients = match ($event) {
+            'CREATED' => [$swap->target_employee_id],
+            'PENDING_APPROVAL' => [$swap->requester_id],
+            default => [$swap->requester_id, $swap->target_employee_id],
+        };
+        WorkNotifications::send('SWAP_'.$event, $swap->id, $swap->department_id, $recipients, $actor, $event === 'PENDING_APPROVAL');
     }
 
     private function audit(?int $actor, int $department, string $type, int $id, string $action, CarbonImmutable $time, array $context): void

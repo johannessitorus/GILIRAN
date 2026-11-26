@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\ApiProblem;
 use App\Services\ScheduleRules;
+use App\Services\WorkNotifications;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -116,6 +117,13 @@ final class HandoverController extends Controller
                 'acknowledge' => 'ACKNOWLEDGED',
             };
             $this->audit($actor, 'handovers', $event, $report, $row);
+            if ($action === 'submit') {
+                $recipientId = DB::table('shift_assignments')->where('id', $row->recipient_assignment_id)->value('employee_id');
+                WorkNotifications::send('HANDOVER_SUBMITTED', $row->id, $actor->department_id, [$recipientId], $actor->id);
+            }
+            if ($action === 'acknowledge') {
+                WorkNotifications::send('HANDOVER_ACKNOWLEDGED', $row->id, $actor->department_id, [$row->submitted_by], $actor->id);
+            }
 
             return $this->result($row);
         }, 3);

@@ -69,6 +69,28 @@ final class SwapTest extends TestCase
         $this->propose();
     }
 
+    public function test_swap_notifications_are_scoped_and_can_only_be_read_by_the_recipient(): void
+    {
+        $id = $this->propose();
+        $inbox = '/api/v1/notifications';
+        $notification = $this->as('b')->getJson($inbox)->assertOk()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.event', 'SWAP_CREATED')->assertJsonPath('data.0.subject_id', (string) $id)
+            ->assertJsonPath('data.0.read_at', null)->json('data.0.id');
+        $read = "{$inbox}/{$notification}/read";
+        $this->as('a')->post($read)->assertNotFound();
+        $this->as('other')->getJson($inbox)->assertOk()->assertJsonCount(0, 'data');
+        $this->as('b')->post($read)->assertNoContent();
+        $marked = $this->getJson($inbox)->assertOk()->json('data.0.read_at');
+        $this->assertNotNull($marked);
+        $this->post($read)->assertNoContent();
+        $this->getJson($inbox)->assertJsonPath('data.0.read_at', $marked);
+        $this->post("/api/v1/swaps/{$id}/accept")->assertOk();
+        $this->as('s')->getJson($inbox)->assertJsonPath('data.0.event', 'SWAP_PENDING_APPROVAL');
+        $this->post("/api/v1/swaps/{$id}/approve")->assertOk();
+        $this->as('a')->getJson($inbox)->assertJsonPath('data.0.event', 'SWAP_APPROVED');
+        $this->as('b')->getJson($inbox)->assertJsonPath('data.0.event', 'SWAP_APPROVED');
+    }
+
     public function test_expiry_releases_reservations_at_deadline(): void
     {
         $id = $this->propose();

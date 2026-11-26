@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ApiError, errorMessage, list, write } from './api'
 import type { Option, User } from './api'
+import { useFeedback } from './feedback'
 
 const headings = {
   daftar: 'Daftarkan usaha',
@@ -26,7 +27,7 @@ export function AccountForm({ mode, token, user, onComplete }: {
   mode: AccountPage; token: string; user: User | null; onComplete: (message: string) => void
 }) {
   const [pending, setPending] = useState(false)
-  const [message, setMessage] = useState('')
+  const showFeedback = useFeedback()
   const [error, setError] = useState('')
   const isRegister = mode === 'daftar'
   const isEmailRequest = isRegister || mode === 'lupa-sandi'
@@ -37,14 +38,14 @@ export function AccountForm({ mode, token, user, onComplete }: {
     event.preventDefault()
     const fields = formFields(event.currentTarget)
     setPending(true)
-    setMessage('')
+    showFeedback(null)
     setError('')
     try {
       if (isEmailRequest) {
         await write(isRegister ? '/auth/register' : '/auth/forgot-password', 'POST', fields)
-        setMessage(isRegister
-          ? 'Jika pendaftaran dapat diproses, tautan aktivasi akan dikirim ke surel tersebut.'
-          : 'Jika akun aktif terdaftar, tautan reset akan dikirim ke surel tersebut.')
+        showFeedback(isRegister
+          ? 'Jika pendaftaran dapat diproses, cek email Anda untuk membuka tautan aktivasi.'
+          : 'Jika akun aktif terdaftar, cek email Anda untuk membuka tautan reset.', 'info')
       } else {
         await write(`/auth/links/${mode}`, 'POST', { ...fields, token })
         onComplete(invitation ? 'Undangan diterima.' : mode === 'verify-owner'
@@ -53,11 +54,11 @@ export function AccountForm({ mode, token, user, onComplete }: {
       }
     } catch (failure) {
       if (failure instanceof ApiError && failure.code === 'ACCOUNT_EXISTS') {
-        setError('Surel ini sudah terhubung ke akun atau keanggotaan lain.')
+        setError('Email ini sudah terhubung ke akun atau keanggotaan lain.')
       } else if (failure instanceof ApiError && failure.status === 404) {
         setError('Tautan sudah digunakan, kedaluwarsa, atau tidak berlaku.')
       } else if (invitation && failure instanceof ApiError && failure.status === 401) {
-        setError('Masuk dengan surel yang menerima undangan, lalu buka kembali tautannya.')
+        setError('Masuk dengan Email yang menerima undangan, lalu buka kembali tautannya.')
       } else setError(errorMessage(failure))
     } finally {
       setPending(false)
@@ -73,7 +74,7 @@ export function AccountForm({ mode, token, user, onComplete }: {
         <fieldset disabled={pending} className="grid gap-4">
           {(isRegister || (invitation && !user)) && <label>Nama<input name="name" required maxLength={160} autoComplete="name" /></label>}
           {isRegister && <label>Nama usaha<input name="business_name" required maxLength={120} autoComplete="organization" /></label>}
-          {isEmailRequest && <label>Surel<input name="email" type="email" required maxLength={255} autoComplete="email" /></label>}
+          {isEmailRequest && <label>Email<input name="email" type="email" required maxLength={255} autoComplete="email" /></label>}
           {!isEmailRequest && !(invitation && user) && <>
             <label>Kata sandi baru<input name="password" type="password" required minLength={8} autoComplete="new-password" /></label>
             <label>Ulangi kata sandi<input name="password_confirmation" type="password" required minLength={8} autoComplete="new-password" /></label>
@@ -83,7 +84,6 @@ export function AccountForm({ mode, token, user, onComplete }: {
       </form>
     )}
     {error && <p role="alert" className="error">{error}</p>}
-    {message && <p role="status">{message}</p>}
     <a href={user ? '#jadwal' : '#masuk'} className="text-blue-800 underline">{user ? 'Kembali ke jadwal' : 'Kembali ke masuk'}</a>
   </>
 }
@@ -93,7 +93,7 @@ export function Business({ onExpired }: { onExpired: () => void }) {
   const [refresh, setRefresh] = useState(0)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
+  const showFeedback = useFeedback()
   useEffect(() => {
     const controller = new AbortController()
     void list<Option>('/departments', { active: 'true' }, { signal: controller.signal }).then((data) => {
@@ -111,12 +111,12 @@ export function Business({ onExpired }: { onExpired: () => void }) {
     const form = event.currentTarget
     const fields = formFields(form)
     setPending(true)
+    showFeedback(null)
     setError('')
-    setMessage('')
     try {
       await write(invite ? '/auth/invitations' : '/departments', 'POST', fields)
       form.reset()
-      setMessage(invite ? 'Undangan dikirim.' : 'Cabang atau departemen ditambahkan.')
+      showFeedback(invite ? 'Undangan dikirim.' : 'Cabang atau departemen ditambahkan.')
       if (!invite) setRefresh((value) => value + 1)
     } catch (failure) {
       if (failure instanceof ApiError && failure.status === 401) onExpired()
@@ -129,7 +129,6 @@ export function Business({ onExpired }: { onExpired: () => void }) {
   return <>
     <h1 className="mb-6">Kelola usaha</h1>
     {error && <p role="alert" className="error mb-4">{error}</p>}
-    {message && <p role="status" className="mb-4">{message}</p>}
     <div className="grid items-start gap-4 md:grid-cols-2">
       <section className="schedule p-5">
         <h2 className="mb-4 text-lg font-semibold">Cabang atau departemen</h2>
@@ -145,7 +144,7 @@ export function Business({ onExpired }: { onExpired: () => void }) {
       <form className="schedule p-5" onSubmit={(event) => void submit(event, true)}>
         <h2 className="mb-4 text-lg font-semibold">Undang anggota</h2>
         <fieldset disabled={pending || !departments?.length} className="grid gap-4">
-          <label>Surel anggota<input name="email" type="email" required maxLength={255} /></label>
+          <label>Email anggota<input name="email" type="email" required maxLength={255} /></label>
           <label><span id="invite-role">Peran</span><select name="role" aria-labelledby="invite-role" required><option value="EMPLOYEE">Karyawan</option>
             <option value="SUPERVISOR">Supervisor</option></select></label>
           <label><span id="invite-department">Cabang atau departemen</span>

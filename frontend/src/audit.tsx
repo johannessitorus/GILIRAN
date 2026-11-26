@@ -1,6 +1,6 @@
-﻿import { DateTime } from 'luxon'
 import { useEffect, useState } from 'react'
 import { ApiError, errorMessage, readPage } from './api'
+import { formatLocalTime, zoneLabel } from './time'
 
 const pageSize = 25
 
@@ -56,9 +56,7 @@ type AuditEntry = {
 }
 
 function formatDate(value: string, zone: string) {
-  const iso = DateTime.fromISO(value, { zone })
-  const date = iso.isValid ? iso : DateTime.fromSQL(value, { zone })
-  return date.isValid ? date.setLocale('id').toFormat('d LLL yyyy, HH:mm:ss') : value
+  return formatLocalTime(value, zone, 'd LLL yyyy, HH.mm.ss')
 }
 
 function fieldValue(field: string, value: unknown, zone: string) {
@@ -139,7 +137,7 @@ export function AuditLog({ zone, onExpired }: { zone: string; onExpired: () => v
 
   return <>
     <header className="page-heading">
-      <div><h1>Riwayat audit</h1><p className="muted">Aktivitas terbaru dalam zona waktu {zone}.</p></div>
+      <div><h1>Riwayat audit</h1><p className="muted">Aktivitas terbaru dalam zona waktu {zoneLabel(zone)}.</p></div>
       <button className="min-h-11 enabled:cursor-pointer active:underline" disabled={!entries && !error}
         onClick={() => load(1)}>Muat ulang</button>
     </header>

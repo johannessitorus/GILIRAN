@@ -60,6 +60,11 @@ final class HandoverTest extends TestCase
             ->assertJsonPath('data.submitted_by', (string) $replacement->id);
         $this->patchJson($report, ['version' => 3, 'summary' => 'Pengganti'])->assertConflict();
 
+        $this->as($peer);
+        $inbox = $this->getJson('/api/v1/notifications')->assertOk()
+            ->assertJsonPath('data.0.event', 'HANDOVER_SUBMITTED')->assertJsonPath('data.0.subject_id', (string) $id);
+        $this->assertStringNotContainsString('privat', $inbox->getContent());
+
         $this->as($supervisor);
         $this->postJson("/api/v1/assignments/{$source}/cancel", ['version' => 2])->assertConflict()
             ->assertJsonPath('error.code', 'ASSIGNMENT_HAS_HANDOVER');
@@ -92,6 +97,10 @@ final class HandoverTest extends TestCase
             ->assertJsonPath('error.code', 'VERSION_CONFLICT');
         $this->patchJson("{$report}/tasks/{$first}", ['version' => 1, 'status' => 'DONE'])->assertOk();
         $this->getJson('/api/v1/audit-logs')->assertForbidden();
+
+        $this->as($replacement);
+        $this->getJson('/api/v1/notifications')->assertOk()
+            ->assertJsonPath('data.0.event', 'HANDOVER_ACKNOWLEDGED')->assertJsonPath('data.0.subject_id', (string) $id);
 
         $this->as($outsideSupervisor);
         $this->getJson($report)->assertNotFound();

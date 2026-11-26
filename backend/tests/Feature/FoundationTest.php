@@ -55,6 +55,14 @@ final class FoundationTest extends TestCase
             'starts_at' => '2030-01-02T22:00:00Z', 'ends_at' => '2030-01-03T06:00:00Z'];
 
         $this->actingAs($supervisor, 'web');
+        $this->postJson('/api/v1/assignments', array_replace($payload, ['starts_at' => '2029-12-31T23:00:00Z', 'ends_at' => '2030-01-01T09:00:00Z']))
+            ->assertUnprocessable()->assertJsonPath('error.details.fields.starts_at.0',
+                'Waktu mulai sudah lewat atau sama dengan waktu sekarang. Pilih waktu mulai setelah waktu sekarang.');
+        $this->postJson('/api/v1/assignments', array_replace($payload, ['ends_at' => $payload['starts_at']]))
+            ->assertUnprocessable()->assertJsonPath('error.details.fields.ends_at.0',
+                'Waktu selesai harus setelah waktu mulai. Untuk shift lewat tengah malam, pilih tanggal selesai berikutnya.');
+        $this->postJson('/api/v1/assignments', array_replace($payload, ['ends_at' => '2030-01-03T11:00:00Z']))
+            ->assertUnprocessable()->assertJsonPath('error.details.fields.ends_at.0', 'Durasi shift melebihi batas 12 jam.');
         $first = $this->postJson('/api/v1/assignments', $payload)->assertCreated()->json('data.id');
         $this->postJson('/api/v1/assignments', array_replace($payload, ['employee_id' => (string) $outside->id]))->assertNotFound();
         $this->postJson('/api/v1/assignments', array_replace($payload, ['starts_at' => '2030-01-03T01:00:00Z', 'ends_at' => '2030-01-03T08:00:00Z']))

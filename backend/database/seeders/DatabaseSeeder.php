@@ -12,7 +12,7 @@ class DatabaseSeeder extends Seeder
     }
 }
 
-// | Peran | Surel |
+// | Peran | Email |
 // |---|---|
 // | Admin | admin@giliran.test |
 // | Supervisor | supervisor@giliran.test |

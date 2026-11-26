@@ -7,20 +7,24 @@ import { Schedule } from './schedule'
 import { Swaps } from './swaps'
 import { Handovers } from './handovers'
 import { AuditLog } from './audit'
+import { Notifications } from './notifications'
+import { FeedbackProvider, useFeedback } from './feedback'
 import { AccountForm, Business, isAccountPage } from './accounts'
 import './style.css'
 
 const roles = { ADMIN: 'Owner', SUPERVISOR: 'Supervisor', EMPLOYEE: 'Karyawan' }
 
-function Brand() {
-  return <div className="brand"><span aria-hidden="true">G</span> GILIRAN</div>
+function Brand({ signedIn }: { signedIn: boolean }) {
+  return <a className="brand" href={signedIn ? '#jadwal' : '#masuk'} aria-label={signedIn ? 'GILIRAN, beranda' : 'GILIRAN, masuk'}>
+    <span aria-hidden="true">G</span> GILIRAN
+  </a>
 }
 
 function App() {
+  const showFeedback = useFeedback()
   const [user, setUser] = useState<User | null>(null)
   const [checking, setChecking] = useState(true)
   const [pending, setPending] = useState(false)
-  const [notice, setNotice] = useState('')
   const [authError, setAuthError] = useState('')
   const [startupError, setStartupError] = useState('')
   const [route, setRoute] = useState(() => location.hash.slice(1))
@@ -28,6 +32,9 @@ function App() {
   const params = new URLSearchParams(search)
   const swapPage = page === 'tukar-shift'
   const handoverPage = page === 'serah-terima'
+  const notificationsPage = page === 'notifikasi'
+  const detailId = params.get('id') ?? ''
+  const selectedId = /^[1-9][0-9]*$/.test(detailId) ? detailId : undefined
   const auditPage = page === 'audit' && user !== null && user.role !== 'EMPLOYEE'
   const businessPage = page === 'usaha' && user?.role === 'ADMIN'
 
@@ -55,18 +62,19 @@ function App() {
   const expire = useCallback(() => {
     setUser(null)
     setAuthError('')
-    setNotice('Sesi telah berakhir. Masuk kembali untuk membuka jadwal.')
-  }, [])
+    showFeedback('Sesi telah berakhir. Masuk kembali untuk melanjutkan.', 'info')
+  }, [showFeedback])
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const fields = new FormData(event.currentTarget)
     setPending(true)
-    setNotice('')
+    showFeedback(null)
     setAuthError('')
     try {
       const account = await write<User>('/auth/login', 'POST', { email: fields.get('email'), password: fields.get('password') })
       setUser(account ?? await read<User>('/auth/me'))
+      showFeedback('Anda sudah masuk.')
       const invite = params.get('undangan')
       if (invite && /^[a-f0-9]{64}$/.test(invite)) location.hash = `accept-invite?token=${invite}`
     } catch (error) {
@@ -80,26 +88,26 @@ function App() {
   if (!checking && !startupError && isAccountPage(page)) {
     const token = params.get('token') ?? ''
     return <main className="login"><section className="login-panel">
-      <Brand />
+      <Brand signedIn={Boolean(user)} />
       <AccountForm key={route} mode={page} token={token} user={user} onComplete={(message) => {
         location.hash = user ? 'jadwal' : 'masuk'
-        setNotice(message)
+        showFeedback(message)
         setAuthError('')
         if (user && page === 'reset-password') void restore()
       }} />
       {user && page === 'accept-invite' && <button disabled={pending} onClick={() => void logout()}>Keluar untuk ganti akun</button>}
-      {notice && <p role="status">{notice}</p>}
       {authError && <p role="alert" className="error">{authError}</p>}
     </section></main>
   }
 
   async function logout() {
     setPending(true)
-    setNotice('')
+    showFeedback(null)
     setAuthError('')
     try {
       await write('/auth/logout', 'POST', {})
       setUser(null)
+      showFeedback('Anda sudah keluar.')
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) setUser(null)
       else setAuthError(errorMessage(error))
@@ -111,7 +119,7 @@ function App() {
   if (checking || startupError || !user) {
     return <main className="login">
       <section className="login-panel">
-        <Brand />
+        <Brand signedIn={Boolean(user)} />
         {checking ? <p role="status">Memeriksa sesi…</p> : startupError ? <>
           <p role="alert">{startupError}</p>
           <button className="primary" onClick={() => void restore()}>Coba lagi</button>
@@ -119,9 +127,8 @@ function App() {
           <h1>Masuk</h1>
           <p className="muted">Masuk dengan akun kerja untuk membuka jadwal shift.</p>
           <form onSubmit={login} className="grid gap-4">
-            <label>Surel<input name="email" type="email" autoComplete="username" required /></label>
+            <label>Email<input name="email" type="email" autoComplete="username" required /></label>
             <label>Kata sandi<input name="password" type="password" autoComplete="current-password" required /></label>
-            {notice && <p role="status">{notice}</p>}
             {authError && <p role="alert" className="error">{authError}</p>}
             <button className="primary" disabled={pending}>{pending ? 'Memeriksa…' : 'Masuk'}</button>
           </form>
@@ -138,11 +145,12 @@ function App() {
   return <>
     <header className="topbar">
       <div className="frame topbar-inner">
-        <Brand />
+        <Brand signedIn />
         <nav aria-label="Navigasi utama" className="flex flex-wrap gap-2">
-          <a href="#jadwal" aria-current={swapPage || handoverPage || businessPage || auditPage ? undefined : 'page'}>{title}</a>
+          <a href="#jadwal" aria-current={swapPage || handoverPage || businessPage || auditPage || notificationsPage ? undefined : 'page'}>{title}</a>
           <a href="#tukar-shift" aria-current={swapPage ? 'page' : undefined}>Tukar shift</a>
           <a href="#serah-terima" aria-current={handoverPage ? 'page' : undefined}>Serah terima</a>
+          <a href="#notifikasi" className="min-h-11 flex items-center" aria-current={notificationsPage ? 'page' : undefined}>Notifikasi</a>
           {user.role !== 'EMPLOYEE' && <a href="#audit" aria-current={auditPage ? 'page' : undefined}>Riwayat audit</a>}
           {user.role === 'ADMIN' && <a href="#usaha" aria-current={businessPage ? 'page' : undefined}>Kelola usaha</a>}
         </nav>
@@ -153,15 +161,15 @@ function App() {
       </div>
     </header>
     <main className="frame workspace">
-      {notice && <p role="status">{notice}</p>}
       {authError && <p role="alert" className="error">{authError}</p>}
       {businessPage ? <Business onExpired={expire} /> : swapPage
-        ? <Swaps key={user.id} user={user} onExpired={expire} />
-        : handoverPage ? <Handovers key={user.id} user={user} onExpired={expire} />
+        ? <Swaps key={user.id + ':' + route} user={user} onExpired={expire} initialId={selectedId} />
+        : handoverPage ? <Handovers key={user.id + ':' + route} user={user} onExpired={expire} initialId={selectedId} />
+        : notificationsPage ? <Notifications key={user.id} zone={user.organization_timezone} onExpired={expire} />
         : auditPage ? <AuditLog key={user.id} zone={user.organization_timezone} onExpired={expire} />
         : <Schedule key={user.id} user={user} title={title} onExpired={expire} />}
     </main>
   </>
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(<FeedbackProvider><App /></FeedbackProvider>)
