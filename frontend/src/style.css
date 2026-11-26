@@ -68,6 +68,12 @@ h1 { @apply text-3xl font-bold tracking-tight sm:text-4xl; }
 .completed { @apply bg-emerald-100 text-emerald-900; }
 .cancelled { @apply bg-slate-200 text-slate-700; }
 .actions { @apply flex flex-wrap gap-1; }
+.task-control { @apply min-h-11; }
+summary.task-control { @apply list-item px-2 py-3; }
+.task-control:is(button, select):enabled { cursor: pointer; }
+.task-control:disabled { cursor: not-allowed; }
+.task-control:is(select, input, textarea) { border-color: #64748b; }
+.task-control:is(button, summary):active { text-decoration: underline; }
 dialog { @apply m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:p-7; }
 dialog::backdrop { background: #10203980; }
 dialog h2 { @apply mb-4 text-xl font-bold; }

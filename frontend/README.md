@@ -30,5 +30,8 @@ Buka `http://localhost:5173`. Vite meneruskan `/api` dan `/sanctum` ke backend l
   mengambil alih, dan mengirim draf. Pemilik terkini shift penerima dapat
   mengakui laporan setelah shiftnya dimulai. Owner dan Supervisor dapat
   membaca laporan dalam lingkup akses masing-masing.
+- Pemilik draf dapat menambah, mengubah, atau menghapus tugas tindak lanjut.
+  Setelah laporan dikirim, pemilik shift penerima atau Supervisor yang
+  berwenang dapat mengubah status tugas. Mengakui laporan tidak mengubah status tugas.
 
 Jalankan `npm run build` untuk memeriksa tipe TypeScript dan menghasilkan `dist/`. Di lingkungan produksi, sajikan `dist/`, API, dan rute CSRF dari origin HTTPS yang sama. Konfigurasikan domain stateful Sanctum dan kuki Secure pada backend.

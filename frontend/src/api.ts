@@ -75,7 +75,7 @@ export async function list<T>(path: string, filters: Record<string, string>, opt
   }
 }
 
-export async function write<T>(path: string, method: 'POST' | 'PATCH', payload: object) {
+export async function write<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', payload: object) {
   await request<void>('/sanctum/csrf-cookie')
   const cookie = document.cookie.split('; ').find((value) => value.startsWith('XSRF-TOKEN='))
   if (!cookie) throw new ApiError(419, 'CSRF_TOKEN_MISMATCH', '')

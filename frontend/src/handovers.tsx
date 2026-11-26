@@ -10,7 +10,15 @@ type Shift = Pick<Assignment, 'id' | 'starts_at' | 'ends_at' | 'status'> & {
 }
 
 const statuses = { DRAFT: 'Draf', SUBMITTED: 'Terkirim', ACKNOWLEDGED: 'Diterima' }
-const taskStatuses = { OPEN: 'Terbuka', IN_PROGRESS: 'Dalam proses', DONE: 'Selesai' }
+const taskStatuses = { OPEN: 'Terbuka', IN_PROGRESS: 'Sedang dikerjakan', DONE: 'Selesai' }
+type TaskStatus = keyof typeof taskStatuses
+type Task = { id: string; title: string; details: string | null; status: TaskStatus; version: number }
+type TaskMethod = 'POST' | 'PATCH' | 'DELETE'
+const nextStatuses: Record<TaskStatus, TaskStatus[]> = {
+  OPEN: ['IN_PROGRESS', 'DONE'],
+  IN_PROGRESS: ['OPEN', 'DONE'],
+  DONE: ['OPEN'],
+}
 type Report = {
   id: string
   source_assignment_id: string
@@ -24,7 +32,7 @@ type Report = {
   version: number
 }
 type Detail = Report & {
-  tasks: { id: string; title: string; details: string | null; status: keyof typeof taskStatuses }[]
+  tasks: Task[]
 }
 type DetailData = { report: Detail; source: Shift | null; recipient: Shift | null }
 
@@ -71,6 +79,8 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
   const [listError, setListError] = useState('')
   const [detailError, setDetailError] = useState('')
   const [actionError, setActionError] = useState('')
+  const [taskError, setTaskError] = useState('')
+  const [taskNotice, setTaskNotice] = useState('')
   const [notice, setNotice] = useState('')
   const [pending, setPending] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -111,6 +121,8 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
     setListError('')
     setDetailError('')
     setActionError('')
+    setTaskError('')
+    setTaskNotice('')
     setRows(null)
     setDetail(null)
     setRefresh((value) => value + 1)
@@ -124,6 +136,8 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
     setDetailError('')
     setActionError('')
     setNotice('')
+    setTaskError('')
+    setTaskNotice('')
   }
 
   async function save(path: string, method: 'POST' | 'PATCH', payload: object, message: string) {
@@ -152,6 +166,40 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
   const canEdit = ownsSource && report?.status === 'DRAFT' && report.draft_owner_id === user.id
   const ownsRecipient = isEmployee && detail?.recipient?.employee_id === user.id && detail.recipient.status !== 'CANCELLED'
   const canAcknowledge = ownsRecipient && report?.status === 'SUBMITTED'
+  const canUpdateTasks = report && report.status !== 'DRAFT'
+    && (user.role === 'SUPERVISOR' || (isEmployee && detail?.recipient?.employee_id === user.id))
+
+  async function saveTask(method: TaskMethod, payload: object, task?: Task) {
+    if (pending || !report) return false
+    setPending(true)
+    setTaskError('')
+    setTaskNotice('')
+    try {
+      const result = await write<Task>(path + '/tasks' + (task ? '/' + task.id : ''), method,
+        task ? { ...payload, version: task.version } : payload)
+      if (method !== 'DELETE' && !result) throw new Error('Respons tugas kosong')
+      setDetail((current) => {
+        if (!current || current.report.id !== report.id) return current
+        const tasks = current.report.tasks
+        let updated = tasks
+        if (method === 'DELETE') updated = tasks.filter((item) => item.id !== task?.id)
+        else if (result && task) updated = tasks.map((item) => item.id === result.id ? result : item)
+        else if (result) updated = [...tasks, result]
+        return { ...current, report: { ...current.report, tasks: updated } }
+      })
+      setTaskNotice(method === 'POST' ? 'Tugas ditambahkan.' : method === 'DELETE'
+        ? 'Tugas dihapus.' : 'Tugas diperbarui.')
+      return true
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) onExpired()
+      else if (error instanceof ApiError && error.status === 403) setTaskError('Izin mengubah tugas sudah tidak tersedia. Muat ulang laporan.')
+      else if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') setTaskError('Tugas sudah berubah. Muat ulang laporan sebelum mencoba lagi.')
+      else setTaskError(describeError(error))
+      return false
+    } finally {
+      setPending(false)
+    }
+  }
 
   return <>
     <header className="page-heading">
@@ -205,13 +253,38 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
             <div><dt className="font-semibold">Ringkasan</dt><dd className="whitespace-pre-wrap break-words">{report.summary || '—'}</dd></div>
             <div><dt className="font-semibold">Kendala</dt><dd className="whitespace-pre-wrap break-words">{report.issues || '—'}</dd></div>
           </dl>}
-          {report.tasks.length > 0 && <section>
-            <h3 className="font-semibold">Tugas tindak lanjut</h3>
-            <ul className="mt-2 grid gap-2">{report.tasks.map((task) => <li key={task.id} className="rounded-lg bg-slate-50 p-3">
-              <strong>{task.title}</strong> · {taskStatuses[task.status]}
-              {task.details && <p className="whitespace-pre-wrap break-words">{task.details}</p>}
-            </li>)}</ul>
-          </section>}
+          <section className="grid gap-3" aria-labelledby="handover-tasks">
+            <h3 id="handover-tasks" className="font-semibold">Tugas tindak lanjut</h3>
+            {taskError && <p className="error" role="alert">{taskError}</p>}
+            {taskNotice && <p className="text-emerald-800" role="status">{taskNotice}</p>}
+            {report.tasks.length === 0 ? <p className="muted">Belum ada tugas tindak lanjut.</p> :
+              <ul className="grid gap-2">{report.tasks.map((task) => <li key={task.id} className="grid gap-2 rounded-lg bg-slate-50 p-3">
+                <p className="break-words"><strong>{task.title}</strong> · {taskStatuses[task.status]}</p>
+                {task.details && <p className="whitespace-pre-wrap break-words">{task.details}</p>}
+                {canEdit && <details>
+                  <summary className="task-control w-fit cursor-pointer font-semibold">Ubah atau hapus tugas</summary>
+                  <TaskForm key={task.version} task={task} pending={pending} onSave={saveTask} />
+                </details>}
+                {canUpdateTasks && <form aria-label={'Ubah status tugas ' + task.title} onSubmit={async (event) => {
+                  event.preventDefault()
+                  const form = event.currentTarget
+                  const status = new FormData(form).get('status')
+                  if (await saveTask('PATCH', { status }, task)) form.reset()
+                }}>
+                  <fieldset disabled={pending} className="flex min-w-0 flex-wrap items-end gap-2">
+                    <label>Ubah status<select name="status" className="task-control cursor-pointer" required defaultValue="">
+                      <option value="" disabled>Pilih status</option>
+                      {nextStatuses[task.status].map((status) => <option key={status} value={status}>{taskStatuses[status]}</option>)}
+                    </select></label>
+                    <button className="task-control">Simpan status</button>
+                  </fieldset>
+                </form>}
+              </li>)}</ul>}
+            {canEdit && <details>
+              <summary className="task-control w-fit cursor-pointer font-semibold">Tambah tugas</summary>
+              <TaskForm pending={pending} onSave={saveTask} />
+            </details>}
+          </section>
           {ownsSource && report.status === 'DRAFT' && !canEdit && <div>
             <button className="primary" disabled={pending} onClick={() => void save(path + '/adopt', 'POST',
               { version: report.version }, 'Draf diambil alih.')}>Ambil alih draf</button>
@@ -228,6 +301,46 @@ export function Handovers({ user, onExpired }: { user: User; onExpired: () => vo
       </section>
     </div>
   </>
+}
+
+function TaskForm({ task, pending, onSave }: {
+  task?: Task
+  pending: boolean
+  onSave: (method: TaskMethod, payload: object, task?: Task) => Promise<boolean>
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  return <form onSubmit={async (event) => {
+    event.preventDefault()
+    const form = event.currentTarget
+    const fields = new FormData(form)
+    const title = String(fields.get('title') ?? '').trim()
+    if (!title) {
+      const input = form.elements.namedItem('title') as HTMLInputElement
+      input.setCustomValidity('Isi judul tugas.')
+      input.reportValidity()
+      return
+    }
+    const details = String(fields.get('details') ?? '').trim()
+    const saved = await onSave(task ? 'PATCH' : 'POST', { title, details: details || null }, task)
+    if (saved && !task) form.reset()
+  }}>
+    <fieldset className="grid min-w-0 gap-3" disabled={pending}>
+      <label>Judul tugas<input className="task-control" name="title" required maxLength={255} defaultValue={task?.title}
+        onInput={(event) => event.currentTarget.setCustomValidity('')} /></label>
+      <label>Detail tugas, opsional<textarea className="task-control" name="details" rows={2} defaultValue={task?.details ?? ''} /></label>
+      <div className="actions">
+        <button className="primary task-control">Simpan tugas</button>
+        {task && <button type="button" className="task-control" aria-expanded={confirmDelete}
+          onClick={() => setConfirmDelete(!confirmDelete)}>Hapus tugas</button>}
+      </div>
+      {task && confirmDelete && <div className="grid gap-2">
+        <p>Hapus tugas ini dari draf?</p>
+        <div className="actions">
+          <button type="button" className="danger task-control" onClick={() => void onSave('DELETE', {}, task)}>Ya, hapus tugas</button>
+        </div>
+      </div>}
+    </fieldset>
+  </form>
 }
 
 function DraftForm({ user, rows, source, report, pending, onExpired, onClose, onSave, onSubmitReport }: {
